@@ -134,6 +134,25 @@ func savePointsToJSON(framePoints *[]Point, outputFileName string) {
 	check(err)
 }
 
+func savePointsToCSV(framePoints *[]Point, outputFileName string) {
+	f, err := os.OpenFile(outputFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	defer f.Close()
+	check(err)
+
+	for i := range *framePoints {
+		content := fmt.Sprintf("%d,%d,%d,%d,%d,%d,%d,%d\n",
+			(*framePoints)[i].X,
+			(*framePoints)[i].Y,
+			(*framePoints)[i].Y,
+			(*framePoints)[i].Intensity,
+			(*framePoints)[i].LaserID,
+			(*framePoints)[i].Azimuth,
+			(*framePoints)[i].Distance,
+			(*framePoints)[i].Timestamp)
+		appendFile(&outputFileName, content)
+	}
+}
+
 func assignWorker(pcapFile string, workerIndex int, totalWorkers uint8, isSaveAsJSON bool, outputFolder string, wg *sync.WaitGroup) {
 	if handle, err := pcap.OpenOffline(pcapFile); err != nil {
 		panic(err)
@@ -218,8 +237,8 @@ func assignWorker(pcapFile string, workerIndex int, totalWorkers uint8, isSaveAs
 					// check if new frame
 					if prevAzimuth > azimuth {
 						if isDecode {
-							basename := fmt.Sprintf("frame" + strconv.Itoa(frameCount) + ".json")
-							filename = path.Join(outputFolder, basename)
+							basename := fmt.Sprintf("frame" + strconv.Itoa(frameCount))
+							filename = path.Join(outputFolder, basename+".json")
 
 							savePointsToJSON(&framePoints, filename)
 							// go fmt.Println(frameCount, totalPackets, len(framePoints), azimuth, prevAzimuth)
@@ -243,22 +262,23 @@ func assignWorker(pcapFile string, workerIndex int, totalWorkers uint8, isSaveAs
 	}
 }
 
-func parsePcap(pcapFile string, totalWorkers uint8) {
+func parsePcap(pcapFile string, outputPath *string, totalWorkers uint8) {
 	var wg sync.WaitGroup
 	wg.Add(int(totalWorkers))
 	// fmt.Println("frameCount", "framePointCount", "totalPackets", "azimuth", "prevAzimuth")
 	for workerIndex := uint8(0); workerIndex < totalWorkers; workerIndex++ {
-		go assignWorker(pcapFile, int(workerIndex), totalWorkers, true, "V:/JP01/DataLake/Common_Write/CLARITY_OUPUT/Magic_Hat/json", &wg)
+		go assignWorker(pcapFile, int(workerIndex), totalWorkers, true, *outputPath, &wg)
 	}
 	wg.Wait()
 }
 
 func main() {
 	pcapFile := "C:/Users/brendon.dulam/Desktop/Magic Hat/mytrace_00003_20191017115142_vlp32c.pcap"
-	totalWorkers := uint8(runtime.NumCPU()/2 - 1)
+	outputPath := "C:/Users/brendon.dulam/Desktop/Magic Hat/json"
+	totalWorkers := uint8(runtime.NumCPU() / 2)
 
 	startTime := time.Now()
-	parsePcap(pcapFile, totalWorkers)
+	parsePcap(pcapFile, &outputPath, totalWorkers)
 	endTime := time.Now()
 
 	fmt.Println(totalWorkers, "Workers Execution Time", endTime.Sub(startTime))
