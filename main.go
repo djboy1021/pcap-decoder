@@ -1,0 +1,320 @@
+package main
+
+import (
+	"encoding/binary"
+	"encoding/json"
+	"fmt"
+	"log"
+	"math"
+	"os"
+	"runtime"
+	"strconv"
+
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/pcap"
+)
+
+// Packet structure
+type Packet struct {
+	points  []Point
+	azimuth uint16
+}
+
+// Point structure
+type Point struct {
+	LaserID   uint8  `json:"laserID" bson:"laserID" form:"laserID" query:"laserID"`         // aka channel ID [0:32]
+	Distance  uint16 `json:"distance" bson:"distance" form:"distance" query:"distance"`     // mm
+	X         int16  `json:"x" bson:"x" form:"x" query:"x"`                                 // mm
+	Y         int16  `json:"y" bson:"y" form:"y" query:"y"`                                 // mm
+	Z         int16  `json:"z" bson:"z" form:"z" query:"z"`                                 // mm
+	Azimuth   uint16 `json:"azimuth" bson:"azimuth" form:"azimuth" query:"azimuth"`         // in degree * 100
+	Intensity uint8  `json:"intensity" bson:"intensity" form:"intensity" query:"intensity"` // 0 to 255
+	Timestamp uint32 `json:"timestamp" bson:"timestamp" form:"timestamp" query:"timestamp"` // µs
+}
+
+func decodeBlock(blockID uint16, block *[]byte, prevAzimuth uint16, firingTime *uint32, timingOffsetTable *[32][12]uint32, productID *byte,
+	filename *string, isSaveAsJSON bool) (int, uint16) {
+
+	var f *os.File
+	var err error
+
+	if isSaveAsJSON {
+		f, err = os.OpenFile(*filename,
+			os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		check(err)
+		defer f.Close()
+	}
+
+	// points := make([]Point, 0)
+	pointCount := 0
+
+	// check if flag is correct
+	if !((*block)[0] == 0xFF && (*block)[1] == 0xEE) {
+		return 0, 0
+	}
+
+	azimuth := getAzimuth((*block)[2:4])
+	laserID := uint8(0)
+	blockPointer := 4
+	for laserID < 32 {
+
+		distance := getDistance((*block)[blockPointer:blockPointer+2]) * 2
+
+		if distance > 0 {
+			timingOffset := (*timingOffsetTable)[laserID][blockID]
+
+			// Calculate Precision Azimuth
+			if azimuth < prevAzimuth {
+				azimuth = azimuth + 36000
+			}
+			azimuthGap := (azimuth - prevAzimuth) / 100
+			precisionAzimuth := azimuth + uint16(float32(azimuthGap)*2.304*float32(laserID/2)/55.296)
+
+			// Elevation Angle
+			elevAngle := getElevationAngle(productID, laserID)
+			azimuthOffset := getAzimuthOffset(productID, laserID)
+
+			cosEl := math.Cos(rad(float64(elevAngle)))
+			sinEl := math.Sin(rad(float64(elevAngle)))
+			sinAzimuth := math.Sin(rad(float64(azimuthOffset) + float64(precisionAzimuth)/100))
+			cosAzimuth := math.Cos(rad(float64(azimuthOffset) + float64(precisionAzimuth)/100))
+
+			newPoint := Point{Distance: distance,
+				X:         int16(float64(distance) * cosEl * sinAzimuth),
+				Y:         int16(float64(distance) * cosEl * cosAzimuth),
+				Z:         int16(float64(distance) * sinEl),
+				Intensity: (*block)[blockPointer+2],
+				Timestamp: timingOffset + *firingTime,
+				Azimuth:   precisionAzimuth,
+				LaserID:   laserID}
+
+			if isSaveAsJSON {
+				jsonPoint, _ := json.Marshal(newPoint)
+
+				if _, err := f.WriteString(string(jsonPoint) + ","); err != nil {
+					log.Println(err)
+				}
+			}
+
+			pointCount++
+		}
+
+		blockPointer += 3
+		laserID++
+	}
+	f.Close()
+	return pointCount, azimuth
+}
+
+func decodePayload(payload *[]byte, isDualMode bool, firingTime *uint32, timingOffsetTable *[32][12]uint32, productID *byte, filename *string, isSaveAsJSON bool) int {
+	prevAzimuth := uint16(0)
+	pointCount := int(0)
+	for blockID := uint16(0); blockID < 12; blockID++ {
+		if !isDualMode {
+			block := (*payload)[100*blockID : 100*(blockID+1)]
+			count, azimuth := decodeBlock(blockID, &block, prevAzimuth, firingTime, timingOffsetTable, productID, filename, isSaveAsJSON)
+
+			pointCount += count
+
+			prevAzimuth = azimuth
+		}
+	}
+	return pointCount
+}
+
+func getIsDualMode(factory *[]byte) bool {
+	if (*factory)[0] == 57 {
+		return true
+	}
+	return false
+}
+
+func appendFile(filename *string, contents string) {
+	f, _ := os.OpenFile(*filename,
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+
+	if _, err := f.WriteString(contents); err != nil {
+		log.Println(err)
+	}
+	f.Close()
+}
+
+func getElevationAngle(model *byte, laserID uint8) float32 {
+	if *model == 0x28 {
+		vlp32 := []float32{-25, -1, -1.667, -15.639, -11.31, 0, -0.667, -8.843, -7.254, 0.333, -0.333, -6.148,
+			-5.333, 1.333, 0.667, -4, -4.667, 1.667, 1, -3.667, -3.333, 3.333, 2.333, -2.667, -3, -7, 4.667, -2.333, -2, 15, 10.333, -1.333}
+		return vlp32[laserID]
+	}
+	return 0
+}
+
+func getAzimuthOffset(model *byte, laserID uint8) float32 {
+	if *model == 0x28 {
+		vlp32 := []float32{1.4, -4.2, 1.4, -1.4, 1.4, -1.4, 4.2,
+			-1.4, 1.4, -4.2, 1.4, -1.4, 4.2, -1.4, 4.2, -1.4, 1.4,
+			4.2, 1.4, -4.2, 4.2, -1.4, 1.4, -1.4, 1.4, -1.4, 1.4,
+			-4.2, 4.2, -1.4, 1.4, -1.4}
+		return vlp32[laserID]
+	}
+	return 0
+}
+
+func makeTimingOffsetTable(isDualMode bool) [32][12]uint32 {
+	var timingOffsets [32][12]uint32
+
+	// unit is µs (microsec)
+	fullFiringCycle := float32(55.296)
+	singleFiring := float32(2.304)
+
+	dataBlockIndex := 0
+	dataPointIndex := 0
+	for x := 0; x < 12; x++ {
+		for y := 0; y < 32; y++ {
+			if isDualMode {
+				dataBlockIndex = x / 2
+			} else {
+				dataBlockIndex = x
+			}
+			dataPointIndex = y / 2
+			offset := fullFiringCycle*float32(dataBlockIndex) + singleFiring*float32(dataPointIndex)
+
+			timingOffsets[y][x] = uint32(math.Round(float64(offset)))
+		}
+	}
+
+	return timingOffsets
+}
+
+func getTime(time []byte) uint32 {
+	return binary.LittleEndian.Uint32(time)
+}
+
+func getAzimuth(block []byte) uint16 {
+	return binary.LittleEndian.Uint16(block)
+}
+
+func getDistance(block []byte) uint16 {
+	return uint16(block[1])<<8 + uint16(block[0])
+}
+
+func rad(degrees float64) float64 {
+	return degrees * math.Pi / 180
+}
+
+// check
+func check(e error) {
+	if e != nil {
+		panic(e)
+	}
+}
+
+func parsePcap(pcapFile string, frameIndex int, isSaveAsJSON bool) {
+	if handle, err := pcap.OpenOffline(pcapFile); err != nil {
+		panic(err)
+	} else {
+		packets := gopacket.NewPacketSource(handle, handle.LinkType()).Packets()
+
+		isDualMode := false
+		timingOffsetTable := makeTimingOffsetTable(isDualMode)
+
+		totalPackets := 0
+		lidarPackets := 0
+
+		frameCount := 0
+		prevAzimuth := uint16(35999)
+
+		framePointCount := 0
+
+		filename := fmt.Sprintf("frame" + strconv.Itoa(frameIndex) + ".json")
+		if isSaveAsJSON {
+			os.Remove(filename)
+			appendFile(&filename, "[")
+		}
+
+		for packet := range packets {
+			data := packet.Data()
+			if frameCount > frameIndex {
+				break
+			}
+
+			if len(data) == 1248 {
+				azimuth := getAzimuth(data[1144:1146])
+
+				// Decode point cloud
+				if frameCount == frameIndex {
+					blocks := data[42:1242]
+					firingTime := getTime(data[1242:1246])
+					productID := data[1247]
+
+					poinCount := decodePayload(&blocks, isDualMode, &firingTime, &timingOffsetTable, &productID, &filename, isSaveAsJSON)
+					framePointCount += poinCount
+				}
+
+				if prevAzimuth > azimuth {
+
+					// manipulate file content
+					if isSaveAsJSON && frameCount == frameIndex {
+						fmt.Println("frame", frameCount, ":", framePointCount, totalPackets, azimuth, prevAzimuth)
+						appendFile(&filename, "]")
+					}
+
+					frameCount++
+					framePointCount = 0
+				}
+				prevAzimuth = azimuth
+				lidarPackets++
+			}
+			totalPackets++
+		}
+	}
+}
+
+// pcapStats returns the number of frames, lidar packets, and total packets
+func getPcapStats(pcapFile string) (int, int, int) {
+	handle, err := pcap.OpenOffline(pcapFile)
+	totalPackets := 0
+	lidarPackets := 0
+	frameCount := 0
+
+	if err != nil {
+		panic(err)
+	} else {
+		packets := gopacket.NewPacketSource(handle, handle.LinkType()).Packets()
+
+		prevAzimuth := uint16(35999)
+
+		for packet := range packets {
+			data := packet.Data()
+
+			if len(data) == 1248 {
+				azimuth := getAzimuth(data[1144:1146])
+
+				if prevAzimuth > azimuth {
+					frameCount++
+				}
+
+				prevAzimuth = azimuth
+				lidarPackets++
+			}
+			totalPackets++
+		}
+	}
+
+	return frameCount, lidarPackets, totalPackets
+
+}
+
+func main() {
+	pcapFile := "C:/Users/brendon.dulam/Desktop/Magic Hat/mytrace_00003_20191017115142_vlp32c.pcap"
+	frameCount, _, _ := getPcapStats(pcapFile)
+
+	numCPU := runtime.NumCPU()
+
+	for frameIndex := 0; frameIndex < frameCount; frameIndex += numCPU {
+		parsePcap(pcapFile, frameIndex, true)
+	}
+
+	// parsePcap(pcapFile, 0, true)
+
+	// fmt.Println(pcapFile)
+}
