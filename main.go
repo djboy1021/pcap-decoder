@@ -10,6 +10,8 @@ import (
 	"path"
 	"runtime"
 	"strconv"
+	"sync"
+	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
@@ -21,6 +23,9 @@ type Packet struct {
 	azimuth uint16
 }
 
+var isDualMode bool
+var timingOffsetTable [32][12]uint32
+
 // Point structure
 type Point struct {
 	LaserID   uint8  `json:"laserID" bson:"laserID" form:"laserID" query:"laserID"`         // aka channel ID [0:32]
@@ -31,113 +36,6 @@ type Point struct {
 	Azimuth   uint16 `json:"azimuth" bson:"azimuth" form:"azimuth" query:"azimuth"`         // in degree * 100
 	Intensity uint8  `json:"intensity" bson:"intensity" form:"intensity" query:"intensity"` // 0 to 255
 	Timestamp uint32 `json:"timestamp" bson:"timestamp" form:"timestamp" query:"timestamp"` // µs
-}
-
-func decodeBlock(blockID uint16, block *[]byte, prevAzimuth uint16, firingTime *uint32, timingOffsetTable *[32][12]uint32, productID byte,
-	filename *string, isSaveAsJSON bool) (int, uint16) {
-
-	var f *os.File
-	var err error
-
-	if isSaveAsJSON {
-		f, err = os.OpenFile(*filename,
-			os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		check(err)
-		defer f.Close()
-	}
-
-	// points := make([]Point, 0)
-	pointCount := 0
-
-	// check if flag is correct
-	if !((*block)[0] == 0xFF && (*block)[1] == 0xEE) {
-		return 0, 0
-	}
-
-	azimuth := getAzimuth((*block)[2:4])
-	laserID := uint8(0)
-	blockPointer := 4
-	for laserID < 32 {
-
-		distance := getDistance((*block)[blockPointer:blockPointer+2]) * 2
-
-		if distance > 0 {
-			timingOffset := (*timingOffsetTable)[laserID][blockID]
-
-			// Calculate Precision Azimuth
-			if azimuth < prevAzimuth {
-				azimuth = azimuth + 36000
-			}
-			azimuthGap := (azimuth - prevAzimuth) / 100
-			precisionAzimuth := azimuth + uint16(float32(azimuthGap)*2.304*float32(laserID/2)/55.296)
-
-			// Elevation Angle
-			elevAngle := getElevationAngle(productID, laserID)
-			azimuthOffset := getAzimuthOffset(productID, laserID)
-
-			cosEl := math.Cos(rad(float64(elevAngle)))
-			sinEl := math.Sin(rad(float64(elevAngle)))
-			sinAzimuth := math.Sin(rad(float64(azimuthOffset) + float64(precisionAzimuth)/100))
-			cosAzimuth := math.Cos(rad(float64(azimuthOffset) + float64(precisionAzimuth)/100))
-
-			newPoint := Point{Distance: distance,
-				X:         int16(float64(distance) * cosEl * sinAzimuth),
-				Y:         int16(float64(distance) * cosEl * cosAzimuth),
-				Z:         int16(float64(distance) * sinEl),
-				Intensity: (*block)[blockPointer+2],
-				Timestamp: timingOffset + *firingTime,
-				Azimuth:   precisionAzimuth,
-				LaserID:   laserID}
-
-			if isSaveAsJSON {
-				jsonPoint, _ := json.Marshal(newPoint)
-
-				if _, err := f.WriteString(string(jsonPoint) + ",\n"); err != nil {
-					log.Println(err)
-				}
-			}
-
-			pointCount++
-		}
-
-		blockPointer += 3
-		laserID++
-	}
-	f.Close()
-	return pointCount, azimuth
-}
-
-func decodePayload(payload *[]byte, isDualMode bool, firingTime *uint32, timingOffsetTable *[32][12]uint32, productID byte, filename string, isSaveAsJSON bool) int {
-	prevAzimuth := uint16(0)
-	pointCount := int(0)
-	for blockID := uint16(0); blockID < 12; blockID++ {
-		if !isDualMode {
-			block := (*payload)[100*blockID : 100*(blockID+1)]
-			count, azimuth := decodeBlock(blockID, &block, prevAzimuth, firingTime, timingOffsetTable, productID, &filename, isSaveAsJSON)
-
-			pointCount += count
-
-			prevAzimuth = azimuth
-		}
-	}
-	return pointCount
-}
-
-func getIsDualMode(factory *[]byte) bool {
-	if (*factory)[0] == 57 {
-		return true
-	}
-	return false
-}
-
-func appendFile(filename *string, contents string) {
-	f, _ := os.OpenFile(*filename,
-		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-
-	if _, err := f.WriteString(contents); err != nil {
-		log.Println(err)
-	}
-	f.Close()
 }
 
 func getElevationAngle(model byte, laserID uint8) float32 {
@@ -158,6 +56,39 @@ func getAzimuthOffset(model byte, laserID uint8) float32 {
 		return vlp32[laserID]
 	}
 	return 0
+}
+
+func getIsDualMode(factory *[]byte) bool {
+	if (*factory)[0] == 57 {
+		return true
+	}
+	return false
+}
+
+func appendFile(filename *string, contents string) {
+	f, _ := os.OpenFile(*filename,
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+
+	if _, err := f.WriteString(contents); err != nil {
+		log.Println(err)
+	}
+	f.Close()
+}
+
+func getTime(time []byte) uint32 {
+	return binary.LittleEndian.Uint32(time)
+}
+
+func getAzimuth(block []byte) uint16 {
+	return binary.LittleEndian.Uint16(block)
+}
+
+func getDistance(block []byte) uint16 {
+	return uint16(block[1])<<8 + uint16(block[0])
+}
+
+func rad(degrees float64) float64 {
+	return degrees * math.Pi / 180
 }
 
 func makeTimingOffsetTable(isDualMode bool) [32][12]uint32 {
@@ -186,101 +117,149 @@ func makeTimingOffsetTable(isDualMode bool) [32][12]uint32 {
 	return timingOffsets
 }
 
-func getTime(time []byte) uint32 {
-	return binary.LittleEndian.Uint32(time)
-}
-
-func getAzimuth(block []byte) uint16 {
-	return binary.LittleEndian.Uint16(block)
-}
-
-func getDistance(block []byte) uint16 {
-	return uint16(block[1])<<8 + uint16(block[0])
-}
-
-func rad(degrees float64) float64 {
-	return degrees * math.Pi / 180
-}
-
-// check
 func check(e error) {
 	if e != nil {
 		panic(e)
 	}
 }
 
-func parsePcap(pcapFile string, frameIndex int, totalWorkers uint8, isSaveAsJSON bool, outputFolder string) {
+func savePointsToJSON(framePoints *[]Point, outputFileName string) {
+	f, err := os.OpenFile(outputFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	defer f.Close()
+	check(err)
+
+	allPoints, _ := json.Marshal(*framePoints)
+
+	_, err = f.WriteString(string(allPoints))
+	check(err)
+}
+
+func assignWorker(pcapFile string, workerIndex int, totalWorkers uint8, isSaveAsJSON bool, outputFolder string, wg *sync.WaitGroup) {
 	if handle, err := pcap.OpenOffline(pcapFile); err != nil {
 		panic(err)
 	} else {
 		packets := gopacket.NewPacketSource(handle, handle.LinkType()).Packets()
 
-		isDualMode := false
-		timingOffsetTable := makeTimingOffsetTable(isDualMode)
+		isDualMode = false
+		timingOffsetTable = makeTimingOffsetTable(isDualMode)
 
 		totalPackets := 0
 		lidarPackets := 0
 
 		frameCount := 0
-		prevAzimuth := uint16(35999)
+		prevAzimuth := uint16(0)
 
-		framePointCount := 0
-		filename := ""
+		framePoints := make([]Point, 0)
+		azimuth := uint16(36000)
+
+		var filename string
 
 		for packet := range packets {
 			data := packet.Data()
 			if len(data) == 1248 {
-				azimuth := getAzimuth(data[1144:1146])
-				isDecode := frameCount%int(totalWorkers) == frameIndex
+				firingTime := getTime(data[1242:1246])
+				productID := data[1247]
 
-				// Decode point cloud
-				if isDecode {
-					basname := fmt.Sprintf("frame" + strconv.Itoa(frameCount) + ".json")
-					filename = path.Join(outputFolder, basname)
+				// Decode block
+				for blkIndex := 42; blkIndex < 1242; blkIndex += 100 {
+					azimuth = getAzimuth(data[blkIndex+2 : blkIndex+4])
+					isDecode := frameCount%int(totalWorkers) == workerIndex
 
-					if framePointCount == 0 && isSaveAsJSON {
-						os.Remove(filename)
-						appendFile(&filename, "[")
+					if isDecode {
+						block := data[blkIndex : blkIndex+100]
+						laserID := uint8(0)
+
+						blockPointer := 4
+						for laserID < 32 {
+
+							distance := getDistance(block[blockPointer:blockPointer+2]) * 2
+
+							if distance > 0 {
+								blockID := (blkIndex - 42) / 100
+								timingOffset := timingOffsetTable[laserID][blockID]
+
+								// Calculate Precision Azimuth
+								var azimuthGap uint16
+								if azimuth < prevAzimuth {
+									azimuthGap = (azimuth+36000-prevAzimuth)/100 + 36000
+								} else {
+									azimuthGap = (azimuth - prevAzimuth) / 100
+								}
+								precisionAzimuth := azimuth + uint16(float32(azimuthGap)*2.304*float32(laserID/2)/55.296)
+
+								// Get elevation Angle
+								elevAngle := getElevationAngle(productID, laserID)
+								azimuthOffset := getAzimuthOffset(productID, laserID)
+
+								// Intermmediary calculations
+								cosEl := math.Cos(rad(float64(elevAngle)))
+								sinEl := math.Sin(rad(float64(elevAngle)))
+								sinAzimuth := math.Sin(rad(float64(azimuthOffset) + float64(precisionAzimuth)/100))
+								cosAzimuth := math.Cos(rad(float64(azimuthOffset) + float64(precisionAzimuth)/100))
+
+								// New Point
+								newPoint := Point{Distance: distance,
+									X:         int16(float64(distance) * cosEl * sinAzimuth),
+									Y:         int16(float64(distance) * cosEl * cosAzimuth),
+									Z:         int16(float64(distance) * sinEl),
+									Intensity: block[blockPointer+2],
+									Timestamp: timingOffset + firingTime,
+									Azimuth:   precisionAzimuth,
+									LaserID:   laserID}
+
+								framePoints = append(framePoints, newPoint)
+							}
+
+							blockPointer += 3
+							laserID++
+						}
 					}
 
-					blocks := data[42:1242]
-					firingTime := getTime(data[1242:1246])
-					productID := data[1247]
+					// check if new frame
+					if prevAzimuth > azimuth {
+						if isDecode {
+							basename := fmt.Sprintf("frame" + strconv.Itoa(frameCount) + ".json")
+							filename = path.Join(outputFolder, basename)
 
-					poinCount := decodePayload(&blocks, isDualMode, &firingTime, &timingOffsetTable, productID, filename, isSaveAsJSON)
-					framePointCount += poinCount
-				}
+							savePointsToJSON(&framePoints, filename)
+							// go fmt.Println(frameCount, totalPackets, len(framePoints), azimuth, prevAzimuth)
+						}
 
-				if prevAzimuth > azimuth {
+						// Reset frame's number of points
+						framePoints = make([]Point, 0)
+						frameCount++
 
-					// manipulate file content
-					if isSaveAsJSON && isDecode {
-						fmt.Println("frame", frameCount, ":", framePointCount, totalPackets, azimuth, prevAzimuth)
-						appendFile(&filename, "]")
 					}
 
-					frameCount++
-					framePointCount = 0
+					// Update Previous Azimuth
+					prevAzimuth = azimuth
 				}
-				prevAzimuth = azimuth
+
 				lidarPackets++
 			}
 			totalPackets++
 		}
+		wg.Done()
 	}
+}
+
+func parsePcap(pcapFile string, totalWorkers uint8) {
+	var wg sync.WaitGroup
+	wg.Add(int(totalWorkers))
+	// fmt.Println("frameCount", "framePointCount", "totalPackets", "azimuth", "prevAzimuth")
+	for workerIndex := uint8(0); workerIndex < totalWorkers; workerIndex++ {
+		go assignWorker(pcapFile, int(workerIndex), totalWorkers, true, "V:/JP01/DataLake/Common_Write/CLARITY_OUPUT/Magic_Hat/json", &wg)
+	}
+	wg.Wait()
 }
 
 func main() {
 	pcapFile := "C:/Users/brendon.dulam/Desktop/Magic Hat/mytrace_00003_20191017115142_vlp32c.pcap"
+	totalWorkers := uint8(runtime.NumCPU()/2 - 1)
 
-	totalWorkers := uint8(runtime.NumCPU())
-	startIndex, endIndex := 0, -1
-	fmt.Println(startIndex, endIndex)
+	startTime := time.Now()
+	parsePcap(pcapFile, totalWorkers)
+	endTime := time.Now()
 
-	for workerIndex := uint8(0); workerIndex < totalWorkers; workerIndex++ {
-		go parsePcap(pcapFile, int(workerIndex), totalWorkers, true, "V:/JP01/DataLake/Common_Write/CLARITY_OUPUT/Magic_Hat/json")
-	}
-
-	var input string
-	fmt.Scanln(&input)
+	fmt.Println(totalWorkers, "Workers Execution Time", endTime.Sub(startTime))
 }
