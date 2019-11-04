@@ -208,7 +208,7 @@ func check(e error) {
 	}
 }
 
-func parsePcap(pcapFile string, frameIndex int, isSaveAsJSON bool) {
+func parsePcap(pcapFile string, frameIndex int, totalWorkers uint8, isSaveAsJSON bool) {
 	if handle, err := pcap.OpenOffline(pcapFile); err != nil {
 		panic(err)
 	} else {
@@ -233,15 +233,13 @@ func parsePcap(pcapFile string, frameIndex int, isSaveAsJSON bool) {
 
 		for packet := range packets {
 			data := packet.Data()
-			if frameCount > frameIndex {
-				break
-			}
-
 			if len(data) == 1248 {
 				azimuth := getAzimuth(data[1144:1146])
-
+				isDecode := frameCount%int(totalWorkers) == frameIndex
 				// Decode point cloud
-				if frameCount == frameIndex {
+				if isDecode {
+					filename = fmt.Sprintf("frame" + strconv.Itoa(frameCount) + ".json")
+
 					blocks := data[42:1242]
 					firingTime := getTime(data[1242:1246])
 					productID := data[1247]
@@ -253,7 +251,7 @@ func parsePcap(pcapFile string, frameIndex int, isSaveAsJSON bool) {
 				if prevAzimuth > azimuth {
 
 					// manipulate file content
-					if isSaveAsJSON && frameCount == frameIndex {
+					if isSaveAsJSON && isDecode {
 						fmt.Println("frame", frameCount, ":", framePointCount, totalPackets, azimuth, prevAzimuth)
 						appendFile(&filename, "]")
 					}
@@ -269,52 +267,17 @@ func parsePcap(pcapFile string, frameIndex int, isSaveAsJSON bool) {
 	}
 }
 
-// pcapStats returns the number of frames, lidar packets, and total packets
-func getPcapStats(pcapFile string) (int, int, int) {
-	handle, err := pcap.OpenOffline(pcapFile)
-	totalPackets := 0
-	lidarPackets := 0
-	frameCount := 0
-
-	if err != nil {
-		panic(err)
-	} else {
-		packets := gopacket.NewPacketSource(handle, handle.LinkType()).Packets()
-
-		prevAzimuth := uint16(35999)
-
-		for packet := range packets {
-			data := packet.Data()
-
-			if len(data) == 1248 {
-				azimuth := getAzimuth(data[1144:1146])
-
-				if prevAzimuth > azimuth {
-					frameCount++
-				}
-
-				prevAzimuth = azimuth
-				lidarPackets++
-			}
-			totalPackets++
-		}
-	}
-
-	return frameCount, lidarPackets, totalPackets
-
-}
-
 func main() {
 	pcapFile := "C:/Users/brendon.dulam/Desktop/Magic Hat/mytrace_00003_20191017115142_vlp32c.pcap"
-	frameCount, _, _ := getPcapStats(pcapFile)
+	// frameCount, _, _ := getPcapStats(pcapFile)
 
-	numCPU := runtime.NumCPU()
+	totalWorkers := uint8(float32(runtime.NumCPU()) * 0.7)
 
-	for frameIndex := 0; frameIndex < frameCount; frameIndex += numCPU {
-		parsePcap(pcapFile, frameIndex, true)
+	for workerIndex := uint8(0); workerIndex < totalWorkers; workerIndex++ {
+		go parsePcap(pcapFile, int(workerIndex), totalWorkers, true)
 	}
 
-	// parsePcap(pcapFile, 0, true)
-
 	// fmt.Println(pcapFile)
+	var input string
+	fmt.Scanln(&input)
 }
