@@ -29,7 +29,7 @@ var timingOffsetTable [32][12]uint32
 // Point structure
 type Point struct {
 	LaserID   uint8  `json:"laserID" bson:"laserID" form:"laserID" query:"laserID"`         // aka channel ID [0:32]
-	Distance  uint16 `json:"distance" bson:"distance" form:"distance" query:"distance"`     // mm
+	Distance  uint32 `json:"distance" bson:"distance" form:"distance" query:"distance"`     // mm
 	X         int16  `json:"x" bson:"x" form:"x" query:"x"`                                 // mm
 	Y         int16  `json:"y" bson:"y" form:"y" query:"y"`                                 // mm
 	Z         int16  `json:"z" bson:"z" form:"z" query:"z"`                                 // mm
@@ -87,8 +87,8 @@ func getAzimuth(block []byte) uint16 {
 	return angle
 }
 
-func getDistance(block []byte) uint16 {
-	return uint16(block[1])<<8 + uint16(block[0])
+func getDistance(block []byte) uint32 {
+	return uint32(block[1])<<8 + uint32(block[0])
 }
 
 func rad(degrees float64) float64 {
@@ -139,7 +139,7 @@ func savePointsToJSON(points *[]Point, outputFileName string) {
 	check(err)
 }
 
-func generatePoint(distance *uint16, intensity byte, adjustedTimeStamp *uint32, nextAzimuth *uint16, azimuth *uint16, laserID uint8, productID *byte) Point {
+func generatePoint(distance *uint32, intensity byte, adjustedTimeStamp *uint32, nextAzimuth *uint16, azimuth *uint16, laserID uint8, productID *byte) Point {
 	// Calculate Precision Azimuth
 	var azimuthGap uint16
 	if *nextAzimuth < *azimuth {
@@ -150,6 +150,9 @@ func generatePoint(distance *uint16, intensity byte, adjustedTimeStamp *uint32, 
 
 	K := float64((1 + laserID) / 2)
 	precisionAzimuth := *azimuth + uint16(math.Round(float64(azimuthGap)*K*0.04166667)) // 2.304/55.296 = 0.0416667
+	if precisionAzimuth >= 36000 {
+		precisionAzimuth -= 36000
+	}
 
 	// Get elevation Angle
 	elevAngle := getElevationAngle(*productID, laserID)
@@ -177,7 +180,7 @@ func decodeChannel(data *[]byte, productID *byte, blkIndex *int, azimuth *uint16
 
 	blockPointer := 4
 	for laserID < 32 {
-		distance := getDistance(block[blockPointer:blockPointer+2]) * 2
+		distance := getDistance(block[blockPointer:blockPointer+2]) << 1
 
 		if distance > 0 {
 			blockID := (*blkIndex - 42) / 100
@@ -186,7 +189,7 @@ func decodeChannel(data *[]byte, productID *byte, blkIndex *int, azimuth *uint16
 			// New Point
 			newPoint := generatePoint(&distance, intensity, &adjustedTimeStamp, nextAzimuth, azimuth, laserID, productID)
 
-			if newPoint.Azimuth < *prevAzimuth {
+			if *azimuth <= *prevAzimuth {
 				*nextFramePoints = append(*currFramePoints, newPoint)
 			} else {
 				*currFramePoints = append(*currFramePoints, newPoint)
@@ -219,7 +222,7 @@ func decodeBlocks(data *[]byte, isFinished *bool, frameCount *int,
 		if blkIndex < 1142 {
 			nextAzimuth = getAzimuth((*data)[blkIndex+102 : blkIndex+104])
 		} else {
-			nextAzimuth = *azimuth
+			nextAzimuth = *azimuth + 23 // get the azimuth of next packet
 		}
 
 		if *isFinished {
