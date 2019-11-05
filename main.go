@@ -124,6 +124,7 @@ func check(e error) {
 }
 
 func savePointsToJSON(framePoints *[]Point, outputFileName string) {
+	os.Remove(outputFileName)
 	f, err := os.OpenFile(outputFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	defer f.Close()
 	check(err)
@@ -153,7 +154,15 @@ func savePointsToCSV(framePoints *[]Point, outputFileName string) {
 	}
 }
 
-func assignWorker(pcapFile string, workerIndex int, totalWorkers uint8, isSaveAsJSON bool, outputFolder string, wg *sync.WaitGroup) {
+func assignWorker(pcapFile string,
+	workerIndex uint8,
+	totalWorkers uint8,
+	isSaveAsJSON bool,
+	outputFolder string,
+	startFrame int,
+	endFrame int,
+	wg *sync.WaitGroup) {
+
 	handle, err := pcap.OpenOffline(pcapFile)
 	if err != nil {
 		panic(err)
@@ -167,12 +176,16 @@ func assignWorker(pcapFile string, workerIndex int, totalWorkers uint8, isSaveAs
 	lidarPackets := 0
 
 	frameCount := 0
-	prevAzimuth := uint16(0)
-
 	framePoints := make([]Point, 0)
+	// prevAzimuth := uint16(0)
+	nextAzimuth := uint16(0)
 	azimuth := uint16(36000)
 
 	var filename string
+
+	isFinished := false
+
+	AzimuthRESOLUTION := float64(2.304 / 55.296)
 
 	for packet := range packets {
 		data := packet.Data()
@@ -182,8 +195,20 @@ func assignWorker(pcapFile string, workerIndex int, totalWorkers uint8, isSaveAs
 
 			// Decode block
 			for blkIndex := 42; blkIndex < 1242; blkIndex += 100 {
+				isFinished = frameCount >= endFrame
 				azimuth = getAzimuth(data[blkIndex+2 : blkIndex+4])
-				isDecode := frameCount%int(totalWorkers) == workerIndex
+				isDecode := frameCount%int(totalWorkers) == int(workerIndex)
+				isDecode = isDecode && frameCount >= startFrame
+
+				if blkIndex < 1142 {
+					nextAzimuth = getAzimuth(data[blkIndex+102 : blkIndex+104])
+				} else {
+					nextAzimuth = azimuth
+				}
+
+				if isFinished {
+					break
+				}
 
 				if isDecode {
 					block := data[blkIndex : blkIndex+100]
@@ -200,12 +225,14 @@ func assignWorker(pcapFile string, workerIndex int, totalWorkers uint8, isSaveAs
 
 							// Calculate Precision Azimuth
 							var azimuthGap uint16
-							if azimuth < prevAzimuth {
-								azimuthGap = (azimuth+36000-prevAzimuth)/100 + 36000
+							if nextAzimuth < azimuth {
+								azimuthGap = (nextAzimuth + 36000 - azimuth)
 							} else {
-								azimuthGap = (azimuth - prevAzimuth) / 100
+								azimuthGap = (nextAzimuth - azimuth)
 							}
-							precisionAzimuth := azimuth + uint16(float32(azimuthGap)*2.304*float32(laserID/2)/55.296)
+
+							K := float64((1 + laserID) / 2)
+							precisionAzimuth := azimuth + uint16(math.Round(float64(azimuthGap)*K*AzimuthRESOLUTION))
 
 							// Get elevation Angle
 							elevAngle := getElevationAngle(productID, laserID)
@@ -236,7 +263,7 @@ func assignWorker(pcapFile string, workerIndex int, totalWorkers uint8, isSaveAs
 				}
 
 				// check if new frame
-				if prevAzimuth > azimuth {
+				if azimuth > nextAzimuth {
 					if isDecode {
 						basename := fmt.Sprintf("frame" + strconv.Itoa(frameCount))
 						filename = path.Join(outputFolder, basename+".json")
@@ -250,9 +277,10 @@ func assignWorker(pcapFile string, workerIndex int, totalWorkers uint8, isSaveAs
 					frameCount++
 
 				}
+			}
 
-				// Update Previous Azimuth
-				prevAzimuth = azimuth
+			if isFinished {
+				break
 			}
 
 			lidarPackets++
@@ -263,17 +291,12 @@ func assignWorker(pcapFile string, workerIndex int, totalWorkers uint8, isSaveAs
 
 }
 
-func decodePcap(pcapFile string, workerIndex uint8, totalWorkers uint8, isSaveAsJSON bool, outputFolder string, wg *sync.WaitGroup) {
-	fmt.Println(pcapFile, workerIndex, totalWorkers, isSaveAsJSON, outputFolder)
-	wg.Done()
-}
-
-func parsePcap(pcapFile string, outputPath *string, totalWorkers uint8) {
+func parsePcap(pcapFile string, outputPath *string, totalWorkers uint8, startFrame int, endFrame int) {
 	var wg sync.WaitGroup
 	wg.Add(int(totalWorkers))
 	// fmt.Println("frameCount", "framePointCount", "totalPackets", "azimuth", "prevAzimuth")
 	for workerIndex := uint8(0); workerIndex < totalWorkers; workerIndex++ {
-		go decodePcap(pcapFile, workerIndex, totalWorkers, true, *outputPath, &wg)
+		go assignWorker(pcapFile, workerIndex, totalWorkers, true, *outputPath, startFrame, endFrame, &wg)
 	}
 	wg.Wait()
 }
@@ -282,9 +305,10 @@ func main() {
 	pcapFile := "C:/Users/brendon.dulam/Desktop/Magic Hat/mytrace_00003_20191017115142_vlp32c.pcap"
 	outputPath := "C:/Users/brendon.dulam/Desktop/Magic Hat/json"
 	totalWorkers := uint8(runtime.NumCPU() / 2)
+	// totalWorkers := uint8(1)
 
 	startTime := time.Now()
-	parsePcap(pcapFile, &outputPath, totalWorkers)
+	parsePcap(pcapFile, &outputPath, totalWorkers, 0, 1)
 	endTime := time.Now()
 
 	fmt.Println(totalWorkers, "Workers Execution Time", endTime.Sub(startTime))
