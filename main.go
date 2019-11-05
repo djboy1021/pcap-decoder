@@ -139,14 +139,115 @@ func savePointsToJSON(points *[]Point, outputFileName string) {
 	check(err)
 }
 
-func assignWorker(pcapFile string,
-	workerIndex uint8,
-	totalWorkers uint8,
-	isSaveAsJSON bool,
-	outputFolder string,
-	startFrame int,
-	endFrame int,
-	wg *sync.WaitGroup) {
+func decodeChannel(data *[]byte, productID *byte, blkIndex *int, azimuth *uint16, nextAzimuth *uint16, firingTime *uint32, prevAzimuth *uint16, nextFramePoints *[]Point, currFramePoints *[]Point) {
+	block := (*data)[*blkIndex : *blkIndex+100]
+	laserID := uint8(0)
+
+	blockPointer := 4
+	for laserID < 32 {
+
+		distance := getDistance(block[blockPointer:blockPointer+2]) * 2
+
+		if distance > 0 {
+			blockID := (*blkIndex - 42) / 100
+			timingOffset := timingOffsetTable[laserID][blockID]
+
+			// Calculate Precision Azimuth
+			var azimuthGap uint16
+			if *nextAzimuth < *azimuth {
+				azimuthGap = (*nextAzimuth + 36000 - *azimuth)
+			} else {
+				azimuthGap = (*nextAzimuth - *azimuth)
+			}
+
+			K := float64((1 + laserID) / 2)
+			precisionAzimuth := *azimuth + uint16(math.Round(float64(azimuthGap)*K*0.04166667)) // 2.304/55.296 = 0.0416667
+
+			// Get elevation Angle
+			elevAngle := getElevationAngle(*productID, laserID)
+			azimuthOffset := getAzimuthOffset(*productID, laserID)
+
+			// Intermmediary calculations
+			cosEl := math.Cos(rad(float64(elevAngle)))
+			sinEl := math.Sin(rad(float64(elevAngle)))
+			sinAzimuth := math.Sin(rad(float64(azimuthOffset) + float64(precisionAzimuth)/100))
+			cosAzimuth := math.Cos(rad(float64(azimuthOffset) + float64(precisionAzimuth)/100))
+
+			// New Point
+			newPoint := Point{Distance: distance,
+				X:         int16(float64(distance) * cosEl * sinAzimuth),
+				Y:         int16(float64(distance) * cosEl * cosAzimuth),
+				Z:         int16(float64(distance) * sinEl),
+				Intensity: block[blockPointer+2],
+				Timestamp: timingOffset + *firingTime,
+				Azimuth:   precisionAzimuth,
+				LaserID:   laserID}
+
+			if precisionAzimuth < *prevAzimuth {
+				*nextFramePoints = append(*currFramePoints, newPoint)
+			} else {
+				*currFramePoints = append(*currFramePoints, newPoint)
+			}
+		}
+
+		blockPointer += 3
+		laserID++
+	}
+}
+
+func decodeBlocks(data *[]byte, isFinished *bool, frameCount *int,
+	totalWorkers *uint8, workerIndex *uint8,
+	startFrame *int, endFrame *int,
+	azimuth *uint16, prevAzimuth *uint16,
+	nextFramePoints *[]Point, currFramePoints *[]Point,
+	outputFolder *string) {
+
+	firingTime := getTime((*data)[1242:1246])
+	productID := (*data)[1247]
+	nextAzimuth := uint16(36000)
+
+	// Decode block
+	for blkIndex := 42; blkIndex < 1242; blkIndex += 100 {
+		*isFinished = (*frameCount >= *endFrame) && (*endFrame > 0)
+		*azimuth = getAzimuth((*data)[blkIndex+2 : blkIndex+4])
+		isDecode := *frameCount%int(*totalWorkers) == int(*workerIndex)
+		isDecode = isDecode && *frameCount >= *startFrame
+
+		if blkIndex < 1142 {
+			nextAzimuth = getAzimuth((*data)[blkIndex+102 : blkIndex+104])
+		} else {
+			nextAzimuth = *azimuth
+		}
+
+		if *isFinished {
+			break
+		}
+
+		if isDecode {
+			decodeChannel(data, &productID, &blkIndex, azimuth, &nextAzimuth, &firingTime, prevAzimuth, nextFramePoints, currFramePoints)
+		}
+
+		// check if new frame
+		if *prevAzimuth > *azimuth {
+			if isDecode {
+				basename := fmt.Sprintf("frame" + strconv.Itoa(*frameCount))
+				filename := path.Join(*outputFolder, basename+".json")
+
+				savePointsToJSON(currFramePoints, filename)
+
+				go fmt.Println(*frameCount, len(*currFramePoints), *azimuth, nextAzimuth)
+			}
+
+			// Reset frame's point arrays
+			*currFramePoints = *nextFramePoints
+			*nextFramePoints = make([]Point, 0)
+			*frameCount++
+		}
+		*prevAzimuth = *azimuth
+	}
+}
+
+func assignWorker(pcapFile string, workerIndex uint8, totalWorkers uint8, isSaveAsJSON bool, outputFolder string, startFrame int, endFrame int, wg *sync.WaitGroup) {
 
 	handle, err := pcap.OpenOffline(pcapFile)
 	if err != nil {
@@ -159,116 +260,22 @@ func assignWorker(pcapFile string,
 
 	totalPackets := 0
 	lidarPackets := 0
-
 	frameCount := 0
 	currFramePoints := make([]Point, 0)
 	nextFramePoints := make([]Point, 0)
 	prevAzimuth := uint16(0)
-	nextAzimuth := uint16(36000)
 	azimuth := uint16(0)
-
-	var filename string
 
 	isFinished := false
 
 	for packet := range packets {
 		data := packet.Data()
 		if len(data) == 1248 {
-			firingTime := getTime(data[1242:1246])
-			productID := data[1247]
-
-			// Decode block
-			for blkIndex := 42; blkIndex < 1242; blkIndex += 100 {
-				isFinished = frameCount >= endFrame && endFrame > 0
-				azimuth = getAzimuth(data[blkIndex+2 : blkIndex+4])
-				isDecode := frameCount%int(totalWorkers) == int(workerIndex)
-				isDecode = isDecode && frameCount >= startFrame
-
-				if blkIndex < 1142 {
-					nextAzimuth = getAzimuth(data[blkIndex+102 : blkIndex+104])
-				} else {
-					nextAzimuth = azimuth
-				}
-
-				if isFinished {
-					break
-				}
-
-				if isDecode {
-					block := data[blkIndex : blkIndex+100]
-					laserID := uint8(0)
-
-					blockPointer := 4
-					for laserID < 32 {
-
-						distance := getDistance(block[blockPointer:blockPointer+2]) * 2
-
-						if distance > 0 {
-							blockID := (blkIndex - 42) / 100
-							timingOffset := timingOffsetTable[laserID][blockID]
-
-							// Calculate Precision Azimuth
-							var azimuthGap uint16
-							if nextAzimuth < azimuth {
-								azimuthGap = (nextAzimuth + 36000 - azimuth)
-							} else {
-								azimuthGap = (nextAzimuth - azimuth)
-							}
-
-							K := float64((1 + laserID) / 2)
-							precisionAzimuth := azimuth + uint16(math.Round(float64(azimuthGap)*K*0.04166667)) // 2.304/55.296 = 0.0416667
-
-							// Get elevation Angle
-							elevAngle := getElevationAngle(productID, laserID)
-							azimuthOffset := getAzimuthOffset(productID, laserID)
-
-							// Intermmediary calculations
-							cosEl := math.Cos(rad(float64(elevAngle)))
-							sinEl := math.Sin(rad(float64(elevAngle)))
-							sinAzimuth := math.Sin(rad(float64(azimuthOffset) + float64(precisionAzimuth)/100))
-							cosAzimuth := math.Cos(rad(float64(azimuthOffset) + float64(precisionAzimuth)/100))
-
-							// New Point
-							newPoint := Point{Distance: distance,
-								X:         int16(float64(distance) * cosEl * sinAzimuth),
-								Y:         int16(float64(distance) * cosEl * cosAzimuth),
-								Z:         int16(float64(distance) * sinEl),
-								Intensity: block[blockPointer+2],
-								Timestamp: timingOffset + firingTime,
-								Azimuth:   precisionAzimuth,
-								LaserID:   laserID}
-
-							if precisionAzimuth < prevAzimuth {
-								nextFramePoints = append(currFramePoints, newPoint)
-							} else {
-								currFramePoints = append(currFramePoints, newPoint)
-							}
-						}
-
-						blockPointer += 3
-						laserID++
-					}
-				}
-
-				// check if new frame
-				if prevAzimuth > azimuth {
-					if isDecode {
-						basename := fmt.Sprintf("frame" + strconv.Itoa(frameCount))
-						filename = path.Join(outputFolder, basename+".json")
-
-						savePointsToJSON(&currFramePoints, filename)
-
-						fmt.Println(frameCount, totalPackets, len(currFramePoints), azimuth, nextAzimuth)
-					}
-
-					// Reset frame's point arrays
-					currFramePoints = nextFramePoints
-					nextFramePoints = make([]Point, 0)
-					frameCount++
-
-				}
-				prevAzimuth = azimuth
-			}
+			decodeBlocks(&data, &isFinished, &frameCount,
+				&totalWorkers, &workerIndex,
+				&startFrame, &endFrame,
+				&azimuth, &prevAzimuth,
+				&nextFramePoints, &currFramePoints, &outputFolder)
 
 			if isFinished {
 				break
