@@ -263,12 +263,17 @@ func assignWorker(pcapFile string, workerIndex int, totalWorkers uint8, isSaveAs
 
 }
 
+func decodePcap(pcapFile string, workerIndex uint8, totalWorkers uint8, isSaveAsJSON bool, outputFolder string, wg *sync.WaitGroup) {
+	fmt.Println(pcapFile, workerIndex, totalWorkers, isSaveAsJSON, outputFolder)
+	wg.Done()
+}
+
 func parsePcap(pcapFile string, outputPath *string, totalWorkers uint8) {
 	var wg sync.WaitGroup
 	wg.Add(int(totalWorkers))
 	// fmt.Println("frameCount", "framePointCount", "totalPackets", "azimuth", "prevAzimuth")
 	for workerIndex := uint8(0); workerIndex < totalWorkers; workerIndex++ {
-		go assignWorker(pcapFile, int(workerIndex), totalWorkers, true, *outputPath, &wg)
+		go decodePcap(pcapFile, workerIndex, totalWorkers, true, *outputPath, &wg)
 	}
 	wg.Wait()
 }
