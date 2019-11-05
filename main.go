@@ -80,7 +80,11 @@ func getTime(time []byte) uint32 {
 }
 
 func getAzimuth(block []byte) uint16 {
-	return binary.LittleEndian.Uint16(block)
+	angle := binary.LittleEndian.Uint16(block)
+	if angle > 36000 {
+		return angle - 36000
+	}
+	return angle
 }
 
 func getDistance(block []byte) uint16 {
@@ -123,35 +127,16 @@ func check(e error) {
 	}
 }
 
-func savePointsToJSON(framePoints *[]Point, outputFileName string) {
+func savePointsToJSON(points *[]Point, outputFileName string) {
 	os.Remove(outputFileName)
 	f, err := os.OpenFile(outputFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	defer f.Close()
 	check(err)
 
-	allPoints, _ := json.Marshal(*framePoints)
+	allPoints, _ := json.Marshal(*points)
 
 	_, err = f.WriteString(string(allPoints))
 	check(err)
-}
-
-func savePointsToCSV(framePoints *[]Point, outputFileName string) {
-	f, err := os.OpenFile(outputFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	defer f.Close()
-	check(err)
-
-	for i := range *framePoints {
-		content := fmt.Sprintf("%d,%d,%d,%d,%d,%d,%d,%d\n",
-			(*framePoints)[i].X,
-			(*framePoints)[i].Y,
-			(*framePoints)[i].Y,
-			(*framePoints)[i].Intensity,
-			(*framePoints)[i].LaserID,
-			(*framePoints)[i].Azimuth,
-			(*framePoints)[i].Distance,
-			(*framePoints)[i].Timestamp)
-		appendFile(&outputFileName, content)
-	}
 }
 
 func assignWorker(pcapFile string,
@@ -176,16 +161,15 @@ func assignWorker(pcapFile string,
 	lidarPackets := 0
 
 	frameCount := 0
-	framePoints := make([]Point, 0)
-	// prevAzimuth := uint16(0)
-	nextAzimuth := uint16(0)
-	azimuth := uint16(36000)
+	currFramePoints := make([]Point, 0)
+	nextFramePoints := make([]Point, 0)
+	prevAzimuth := uint16(0)
+	nextAzimuth := uint16(36000)
+	azimuth := uint16(0)
 
 	var filename string
 
 	isFinished := false
-
-	AzimuthRESOLUTION := float64(2.304 / 55.296)
 
 	for packet := range packets {
 		data := packet.Data()
@@ -195,7 +179,7 @@ func assignWorker(pcapFile string,
 
 			// Decode block
 			for blkIndex := 42; blkIndex < 1242; blkIndex += 100 {
-				isFinished = frameCount >= endFrame
+				isFinished = frameCount >= endFrame && endFrame > 0
 				azimuth = getAzimuth(data[blkIndex+2 : blkIndex+4])
 				isDecode := frameCount%int(totalWorkers) == int(workerIndex)
 				isDecode = isDecode && frameCount >= startFrame
@@ -232,7 +216,7 @@ func assignWorker(pcapFile string,
 							}
 
 							K := float64((1 + laserID) / 2)
-							precisionAzimuth := azimuth + uint16(math.Round(float64(azimuthGap)*K*AzimuthRESOLUTION))
+							precisionAzimuth := azimuth + uint16(math.Round(float64(azimuthGap)*K*0.04166667)) // 2.304/55.296 = 0.0416667
 
 							// Get elevation Angle
 							elevAngle := getElevationAngle(productID, laserID)
@@ -254,7 +238,11 @@ func assignWorker(pcapFile string,
 								Azimuth:   precisionAzimuth,
 								LaserID:   laserID}
 
-							framePoints = append(framePoints, newPoint)
+							if precisionAzimuth < prevAzimuth {
+								nextFramePoints = append(currFramePoints, newPoint)
+							} else {
+								currFramePoints = append(currFramePoints, newPoint)
+							}
 						}
 
 						blockPointer += 3
@@ -263,20 +251,23 @@ func assignWorker(pcapFile string,
 				}
 
 				// check if new frame
-				if azimuth > nextAzimuth {
+				if prevAzimuth > azimuth {
 					if isDecode {
 						basename := fmt.Sprintf("frame" + strconv.Itoa(frameCount))
 						filename = path.Join(outputFolder, basename+".json")
 
-						savePointsToJSON(&framePoints, filename)
-						// go fmt.Println(frameCount, totalPackets, len(framePoints), azimuth, prevAzimuth)
+						savePointsToJSON(&currFramePoints, filename)
+
+						fmt.Println(frameCount, totalPackets, len(currFramePoints), azimuth, nextAzimuth)
 					}
 
-					// Reset frame's number of points
-					framePoints = make([]Point, 0)
+					// Reset frame's point arrays
+					currFramePoints = nextFramePoints
+					nextFramePoints = make([]Point, 0)
 					frameCount++
 
 				}
+				prevAzimuth = azimuth
 			}
 
 			if isFinished {
@@ -308,7 +299,7 @@ func main() {
 	// totalWorkers := uint8(1)
 
 	startTime := time.Now()
-	parsePcap(pcapFile, &outputPath, totalWorkers, 0, 1)
+	parsePcap(pcapFile, &outputPath, totalWorkers, 0, 3)
 	endTime := time.Now()
 
 	fmt.Println(totalWorkers, "Workers Execution Time", endTime.Sub(startTime))
