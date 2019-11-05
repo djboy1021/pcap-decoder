@@ -139,51 +139,54 @@ func savePointsToJSON(points *[]Point, outputFileName string) {
 	check(err)
 }
 
+func generatePoint(distance *uint16, intensity byte, adjustedTimeStamp *uint32, nextAzimuth *uint16, azimuth *uint16, laserID uint8, productID *byte) Point {
+	// Calculate Precision Azimuth
+	var azimuthGap uint16
+	if *nextAzimuth < *azimuth {
+		azimuthGap = (*nextAzimuth + 36000 - *azimuth)
+	} else {
+		azimuthGap = (*nextAzimuth - *azimuth)
+	}
+
+	K := float64((1 + laserID) / 2)
+	precisionAzimuth := *azimuth + uint16(math.Round(float64(azimuthGap)*K*0.04166667)) // 2.304/55.296 = 0.0416667
+
+	// Get elevation Angle
+	elevAngle := getElevationAngle(*productID, laserID)
+	azimuthOffset := getAzimuthOffset(*productID, laserID)
+
+	// Intermmediary calculations
+	cosEl := math.Cos(rad(float64(elevAngle)))
+	sinEl := math.Sin(rad(float64(elevAngle)))
+	sinAzimuth := math.Sin(rad(float64(azimuthOffset) + float64(precisionAzimuth)/100))
+	cosAzimuth := math.Cos(rad(float64(azimuthOffset) + float64(precisionAzimuth)/100))
+
+	return Point{Distance: *distance,
+		X:         int16(float64(*distance) * cosEl * sinAzimuth),
+		Y:         int16(float64(*distance) * cosEl * cosAzimuth),
+		Z:         int16(float64(*distance) * sinEl),
+		Intensity: intensity,
+		Timestamp: *adjustedTimeStamp,
+		Azimuth:   precisionAzimuth,
+		LaserID:   laserID}
+}
+
 func decodeChannel(data *[]byte, productID *byte, blkIndex *int, azimuth *uint16, nextAzimuth *uint16, firingTime *uint32, prevAzimuth *uint16, nextFramePoints *[]Point, currFramePoints *[]Point) {
 	block := (*data)[*blkIndex : *blkIndex+100]
 	laserID := uint8(0)
 
 	blockPointer := 4
 	for laserID < 32 {
-
 		distance := getDistance(block[blockPointer:blockPointer+2]) * 2
 
 		if distance > 0 {
 			blockID := (*blkIndex - 42) / 100
-			timingOffset := timingOffsetTable[laserID][blockID]
-
-			// Calculate Precision Azimuth
-			var azimuthGap uint16
-			if *nextAzimuth < *azimuth {
-				azimuthGap = (*nextAzimuth + 36000 - *azimuth)
-			} else {
-				azimuthGap = (*nextAzimuth - *azimuth)
-			}
-
-			K := float64((1 + laserID) / 2)
-			precisionAzimuth := *azimuth + uint16(math.Round(float64(azimuthGap)*K*0.04166667)) // 2.304/55.296 = 0.0416667
-
-			// Get elevation Angle
-			elevAngle := getElevationAngle(*productID, laserID)
-			azimuthOffset := getAzimuthOffset(*productID, laserID)
-
-			// Intermmediary calculations
-			cosEl := math.Cos(rad(float64(elevAngle)))
-			sinEl := math.Sin(rad(float64(elevAngle)))
-			sinAzimuth := math.Sin(rad(float64(azimuthOffset) + float64(precisionAzimuth)/100))
-			cosAzimuth := math.Cos(rad(float64(azimuthOffset) + float64(precisionAzimuth)/100))
-
+			adjustedTimeStamp := timingOffsetTable[laserID][blockID] + *firingTime
+			intensity := block[blockPointer+2]
 			// New Point
-			newPoint := Point{Distance: distance,
-				X:         int16(float64(distance) * cosEl * sinAzimuth),
-				Y:         int16(float64(distance) * cosEl * cosAzimuth),
-				Z:         int16(float64(distance) * sinEl),
-				Intensity: block[blockPointer+2],
-				Timestamp: timingOffset + *firingTime,
-				Azimuth:   precisionAzimuth,
-				LaserID:   laserID}
+			newPoint := generatePoint(&distance, intensity, &adjustedTimeStamp, nextAzimuth, azimuth, laserID, productID)
 
-			if precisionAzimuth < *prevAzimuth {
+			if newPoint.Azimuth < *prevAzimuth {
 				*nextFramePoints = append(*currFramePoints, newPoint)
 			} else {
 				*currFramePoints = append(*currFramePoints, newPoint)
@@ -227,18 +230,17 @@ func decodeBlocks(data *[]byte, isFinished *bool, frameCount *int,
 			decodeChannel(data, &productID, &blkIndex, azimuth, &nextAzimuth, &firingTime, prevAzimuth, nextFramePoints, currFramePoints)
 		}
 
-		// check if new frame
+		// on new frame
 		if *prevAzimuth > *azimuth {
+			// Post process points
 			if isDecode {
 				basename := fmt.Sprintf("frame" + strconv.Itoa(*frameCount))
 				filename := path.Join(*outputFolder, basename+".json")
-
 				savePointsToJSON(currFramePoints, filename)
-
 				go fmt.Println(*frameCount, len(*currFramePoints), *azimuth, nextAzimuth)
 			}
 
-			// Reset frame's point arrays
+			// Reset frame's points arrays
 			*currFramePoints = *nextFramePoints
 			*nextFramePoints = make([]Point, 0)
 			*frameCount++
@@ -248,7 +250,6 @@ func decodeBlocks(data *[]byte, isFinished *bool, frameCount *int,
 }
 
 func assignWorker(pcapFile string, workerIndex uint8, totalWorkers uint8, isSaveAsJSON bool, outputFolder string, startFrame int, endFrame int, wg *sync.WaitGroup) {
-
 	handle, err := pcap.OpenOffline(pcapFile)
 	if err != nil {
 		panic(err)
@@ -286,7 +287,6 @@ func assignWorker(pcapFile string, workerIndex uint8, totalWorkers uint8, isSave
 		totalPackets++
 	}
 	wg.Done()
-
 }
 
 func parsePcap(pcapFile string, outputPath *string, totalWorkers uint8, startFrame int, endFrame int) {
