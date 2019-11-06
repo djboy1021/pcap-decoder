@@ -10,6 +10,7 @@ import (
 	"path"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -45,7 +46,7 @@ func getElevationAngle(model byte, laserID uint8) float32 {
 		return vlp32[laserID]
 	} else if model == 0x22 {
 		vlp16 := []float32{-15, 1, -13, -3, -11, 5, -9, 7, -7, 9, -5, 11, -3, 13, -1, 15}
-		return vlp16[laserID]
+		return vlp16[laserID%16]
 	}
 	return 0
 }
@@ -255,6 +256,57 @@ func decodeVLP32Blocks(data *[]byte, isFinished *bool, frameCount *int,
 	}
 }
 
+func decodeVLP16Blocks(data *[]byte, isFinished *bool, frameCount *int,
+	totalWorkers *uint8, workerIndex *uint8,
+	startFrame *int, endFrame *int,
+	azimuth *uint16, prevAzimuth *uint16,
+	nextFramePoints *[]Point, currFramePoints *[]Point,
+	outputFolder *string) {
+
+	firingTime := getTime((*data)[1242:1246])
+	productID := (*data)[1247]
+	nextAzimuth := uint16(36000)
+
+	// Decode block
+	for blkIndex := 42; blkIndex < 1242; blkIndex += 100 {
+		*isFinished = (*frameCount >= *endFrame) && (*endFrame > 0)
+		*azimuth = getAzimuth((*data)[blkIndex+2 : blkIndex+4])
+		isDecode := *frameCount%int(*totalWorkers) == int(*workerIndex)
+		isDecode = isDecode && *frameCount >= *startFrame
+
+		if blkIndex < 1142 {
+			nextAzimuth = getAzimuth((*data)[blkIndex+102 : blkIndex+104])
+		} else {
+			nextAzimuth = *azimuth + 23 // get the azimuth of next packet
+		}
+
+		if *isFinished {
+			break
+		}
+
+		if isDecode {
+			decodeChannel(data, &productID, &blkIndex, azimuth, &nextAzimuth, &firingTime, prevAzimuth, nextFramePoints, currFramePoints)
+		}
+
+		// on new frame
+		if *prevAzimuth > *azimuth {
+			// Post process points
+			if isDecode {
+				basename := fmt.Sprintf("vlp16_frame" + strconv.Itoa(*frameCount))
+				filename := path.Join(*outputFolder, basename+".json")
+				savePointsToJSON(currFramePoints, filename)
+				go fmt.Println(*frameCount, len(*currFramePoints), *azimuth, nextAzimuth)
+			}
+
+			// Reset frame's points arrays
+			*currFramePoints = *nextFramePoints
+			*nextFramePoints = make([]Point, 0)
+			*frameCount++
+		}
+		*prevAzimuth = *azimuth
+	}
+}
+
 func assignWorker(pcapFile string, lidarModel byte, workerIndex uint8, totalWorkers uint8, isSaveAsJSON bool, outputFolder string, startFrame int, endFrame int, wg *sync.WaitGroup) {
 	handle, err := pcap.OpenOffline(pcapFile)
 	if err != nil {
@@ -278,14 +330,19 @@ func assignWorker(pcapFile string, lidarModel byte, workerIndex uint8, totalWork
 	for packet := range packets {
 		data := packet.Data()
 		if len(data) == 1248 {
-			if data[1247] == 0x28 {
+			productID := (data)[1247]
+			if productID == 0x28 {
 				decodeVLP32Blocks(&data, &isFinished, &frameCount,
 					&totalWorkers, &workerIndex,
 					&startFrame, &endFrame,
 					&azimuth, &prevAzimuth,
 					&nextFramePoints, &currFramePoints, &outputFolder)
-			} else if data[1247] == 0x22 {
-				fmt.Println("Will decode VLP16")
+			} else if productID == 0x22 {
+				decodeVLP16Blocks(&data, &isFinished, &frameCount,
+					&totalWorkers, &workerIndex,
+					&startFrame, &endFrame,
+					&azimuth, &prevAzimuth,
+					&nextFramePoints, &currFramePoints, &outputFolder)
 			}
 
 			if isFinished {
@@ -299,25 +356,105 @@ func assignWorker(pcapFile string, lidarModel byte, workerIndex uint8, totalWork
 	wg.Done()
 }
 
-func parsePcap(pcapFile string, outputPath *string, totalWorkers uint8, startFrame int, endFrame int, lidarModel byte) {
+func parsePcap(pcapFile *string, outputPath *string, totalWorkers uint8, startFrame int, endFrame int, lidarModel byte) {
 	var wg sync.WaitGroup
 	wg.Add(int(totalWorkers))
 	// fmt.Println("frameCount", "framePointCount", "totalPackets", "azimuth", "prevAzimuth")
 	for workerIndex := uint8(0); workerIndex < totalWorkers; workerIndex++ {
-		go assignWorker(pcapFile, lidarModel, workerIndex, totalWorkers, true, *outputPath, startFrame, endFrame, &wg)
+		go assignWorker(*pcapFile, lidarModel, workerIndex, totalWorkers, true, *outputPath, startFrame, endFrame, &wg)
 	}
 	wg.Wait()
 }
 
-func main() {
-	pcapFile := "C:/Users/brendon.dulam/Desktop/Magic Hat/city.pcap"
-	outputPath := "V:/JP01/DataLake/Common_Write/CLARITY_OUPUT/Magic_Hat/json/test"
-	totalWorkers := uint8(runtime.NumCPU() / 2)
-	// totalWorkers := uint8(1)
+func getArgs(pcapFile *string, outputPath *string, startFrame *int, endFrame *int, mkdirp *bool) {
+	correctedArgs := make([]string, 0)
 
+	for i := 1; i < len(os.Args); i++ {
+		if strings.Contains(os.Args[i], "--") {
+			correctedArgs = append(correctedArgs, os.Args[i])
+		} else {
+			correctedArgs[len(correctedArgs)-1] += " " + os.Args[i]
+		}
+	}
+
+	var err error
+	for _, arg := range correctedArgs {
+		if strings.Contains(arg, "--") {
+			splitStr := strings.Split(arg, " ")
+			key := splitStr[0]
+			value := strings.Join(splitStr[1:], " ")
+			value = strings.Replace(value, "'", "", -1)
+			value = strings.Replace(value, "\"", "", -1)
+
+			if strings.Contains(key, "pcapFile") {
+				*pcapFile = value
+			} else if strings.Contains(key, "outputPath") {
+				*outputPath = value
+			} else if strings.Contains(key, "startFrame") {
+				*startFrame, err = strconv.Atoi(value)
+			} else if strings.Contains(key, "endFrame") {
+				*endFrame, err = strconv.Atoi(value)
+			} else if strings.Contains(key, "mkdirp") {
+				*mkdirp, err = strconv.ParseBool(value)
+			}
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			panic("Syntax Error")
+		}
+	}
+
+}
+
+func exists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return true, err
+}
+
+func main() {
+	// Default values
+	pcapFile := ""
+	outputPath := ""
+	startFrame := 0
+	endFrame := -1
+	mkdirp := false
+
+	// Get Commandline arguments
+	getArgs(&pcapFile, &outputPath, &startFrame, &endFrame, &mkdirp)
+
+	// Check if PCAP file exists
+	if isExist, _ := exists(pcapFile); !isExist {
+		panic(pcapFile + " does not exist")
+	}
+
+	// Check if Output path exists
+	if isExist, _ := exists(outputPath); !isExist {
+		panic(outputPath + " does not exist")
+	}
+
+	fmt.Println(pcapFile, outputPath, startFrame, endFrame, mkdirp)
+
+	// Allocate number of workers
+	totalWorkers := uint8(runtime.NumCPU() / 2)
+	if endFrame < 0 || int(totalWorkers) < (endFrame-startFrame) { //if all frames
+		totalWorkers = uint8(runtime.NumCPU() / 2)
+	} else if endFrame > startFrame { //if number of frames is less than cpu cores
+		totalWorkers = uint8(endFrame - startFrame)
+	} else { // if only one frame
+		totalWorkers = uint8(1)
+	}
+
+	// Start decoding the PCAP file
 	startTime := time.Now()
-	parsePcap(pcapFile, &outputPath, totalWorkers, 0, -1, 0x28)
+	// parsePcap(&pcapFile, &outputPath, totalWorkers, startFrame, endFrame, 0x28)
 	endTime := time.Now()
 
-	fmt.Println(totalWorkers, "Workers Execution Time", endTime.Sub(startTime))
+	fmt.Println("Workers Execution Time", endTime.Sub(startTime))
 }
