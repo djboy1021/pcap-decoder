@@ -31,11 +31,9 @@ The following are the acceptable input arguments. They can be written in any ord
   * This accepts an integer as input
   * default value is -1 or the end frame
 
-### Example
-
-
+### Example Usage
 ```console
-$ ./pcapDecoder.exe --pcapFile "C:/Users/brendon.dulam/Desktop/Magic Hat/city.pcap" --outputPath 'V:/JP01/DataLake/Common_Write/CLARITY_OUPUT/Magic_Hat/json/test' --startFrame 0 --endFrame 20 --mkdirp false
+$ ./pcapDecoder.exe --pcapFile "C:/Users/username/Desktop/Magic Hat/city.pcap" --outputPath "V:/JP01/DataLake/Common_Write/CLARITY_OUPUT/Magic_Hat/json/test" --startFrame 0 --endFrame 20 --mkdirp false
 ```
 
 ## Supported Models
