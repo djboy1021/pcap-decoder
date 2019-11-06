@@ -2,4 +2,5 @@
 Gopkg.lock
 Gopkg.toml
 
+*.exe
 *.json
