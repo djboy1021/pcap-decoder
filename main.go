@@ -43,6 +43,9 @@ func getElevationAngle(model byte, laserID uint8) float32 {
 		vlp32 := []float32{-25, -1, -1.667, -15.639, -11.31, 0, -0.667, -8.843, -7.254, 0.333, -0.333, -6.148,
 			-5.333, 1.333, 0.667, -4, -4.667, 1.667, 1, -3.667, -3.333, 3.333, 2.333, -2.667, -3, -7, 4.667, -2.333, -2, 15, 10.333, -1.333}
 		return vlp32[laserID]
+	} else if model == 0x22 {
+		vlp16 := []float32{-15, 1, -13, -3, -11, 5, -9, 7, -7, 9, -5, 11, -3, 13, -1, 15}
+		return vlp16[laserID]
 	}
 	return 0
 }
@@ -176,18 +179,18 @@ func generatePoint(distance *uint32, intensity byte, adjustedTimeStamp *uint32, 
 
 func decodeChannel(data *[]byte, productID *byte, blkIndex *int, azimuth *uint16, nextAzimuth *uint16, firingTime *uint32, prevAzimuth *uint16, nextFramePoints *[]Point, currFramePoints *[]Point) {
 	block := (*data)[*blkIndex : *blkIndex+100]
-	laserID := uint8(0)
+	blkID := uint8(0)
 
 	blockPointer := 4
-	for laserID < 32 {
+	for blkID < 32 {
 		distance := getDistance(block[blockPointer:blockPointer+2]) << 1
 
 		if distance > 0 {
 			blockID := (*blkIndex - 42) / 100
-			adjustedTimeStamp := timingOffsetTable[laserID][blockID] + *firingTime
+			adjustedTimeStamp := timingOffsetTable[blkID][blockID] + *firingTime
 			intensity := block[blockPointer+2]
 			// New Point
-			newPoint := generatePoint(&distance, intensity, &adjustedTimeStamp, nextAzimuth, azimuth, laserID, productID)
+			newPoint := generatePoint(&distance, intensity, &adjustedTimeStamp, nextAzimuth, azimuth, blkID, productID)
 
 			if *azimuth <= *prevAzimuth {
 				*nextFramePoints = append(*currFramePoints, newPoint)
@@ -197,11 +200,11 @@ func decodeChannel(data *[]byte, productID *byte, blkIndex *int, azimuth *uint16
 		}
 
 		blockPointer += 3
-		laserID++
+		blkID++
 	}
 }
 
-func decodeBlocks(data *[]byte, isFinished *bool, frameCount *int,
+func decodeVLP32Blocks(data *[]byte, isFinished *bool, frameCount *int,
 	totalWorkers *uint8, workerIndex *uint8,
 	startFrame *int, endFrame *int,
 	azimuth *uint16, prevAzimuth *uint16,
@@ -237,7 +240,7 @@ func decodeBlocks(data *[]byte, isFinished *bool, frameCount *int,
 		if *prevAzimuth > *azimuth {
 			// Post process points
 			if isDecode {
-				basename := fmt.Sprintf("frame" + strconv.Itoa(*frameCount))
+				basename := fmt.Sprintf("vlp32_frame" + strconv.Itoa(*frameCount))
 				filename := path.Join(*outputFolder, basename+".json")
 				savePointsToJSON(currFramePoints, filename)
 				go fmt.Println(*frameCount, len(*currFramePoints), *azimuth, nextAzimuth)
@@ -252,7 +255,7 @@ func decodeBlocks(data *[]byte, isFinished *bool, frameCount *int,
 	}
 }
 
-func assignWorker(pcapFile string, workerIndex uint8, totalWorkers uint8, isSaveAsJSON bool, outputFolder string, startFrame int, endFrame int, wg *sync.WaitGroup) {
+func assignWorker(pcapFile string, lidarModel byte, workerIndex uint8, totalWorkers uint8, isSaveAsJSON bool, outputFolder string, startFrame int, endFrame int, wg *sync.WaitGroup) {
 	handle, err := pcap.OpenOffline(pcapFile)
 	if err != nil {
 		panic(err)
@@ -275,11 +278,15 @@ func assignWorker(pcapFile string, workerIndex uint8, totalWorkers uint8, isSave
 	for packet := range packets {
 		data := packet.Data()
 		if len(data) == 1248 {
-			decodeBlocks(&data, &isFinished, &frameCount,
-				&totalWorkers, &workerIndex,
-				&startFrame, &endFrame,
-				&azimuth, &prevAzimuth,
-				&nextFramePoints, &currFramePoints, &outputFolder)
+			if data[1247] == 0x28 {
+				decodeVLP32Blocks(&data, &isFinished, &frameCount,
+					&totalWorkers, &workerIndex,
+					&startFrame, &endFrame,
+					&azimuth, &prevAzimuth,
+					&nextFramePoints, &currFramePoints, &outputFolder)
+			} else if data[1247] == 0x22 {
+				fmt.Println("Will decode VLP16")
+			}
 
 			if isFinished {
 				break
@@ -292,24 +299,24 @@ func assignWorker(pcapFile string, workerIndex uint8, totalWorkers uint8, isSave
 	wg.Done()
 }
 
-func parsePcap(pcapFile string, outputPath *string, totalWorkers uint8, startFrame int, endFrame int) {
+func parsePcap(pcapFile string, outputPath *string, totalWorkers uint8, startFrame int, endFrame int, lidarModel byte) {
 	var wg sync.WaitGroup
 	wg.Add(int(totalWorkers))
 	// fmt.Println("frameCount", "framePointCount", "totalPackets", "azimuth", "prevAzimuth")
 	for workerIndex := uint8(0); workerIndex < totalWorkers; workerIndex++ {
-		go assignWorker(pcapFile, workerIndex, totalWorkers, true, *outputPath, startFrame, endFrame, &wg)
+		go assignWorker(pcapFile, lidarModel, workerIndex, totalWorkers, true, *outputPath, startFrame, endFrame, &wg)
 	}
 	wg.Wait()
 }
 
 func main() {
-	pcapFile := "C:/Users/brendon.dulam/Desktop/Magic Hat/mytrace_00003_20191017115142_vlp32c.pcap"
-	outputPath := "C:/Users/brendon.dulam/Desktop/Magic Hat/json"
+	pcapFile := "C:/Users/brendon.dulam/Desktop/Magic Hat/city.pcap"
+	outputPath := "V:/JP01/DataLake/Common_Write/CLARITY_OUPUT/Magic_Hat/json/test"
 	totalWorkers := uint8(runtime.NumCPU() / 2)
 	// totalWorkers := uint8(1)
 
 	startTime := time.Now()
-	parsePcap(pcapFile, &outputPath, totalWorkers, 0, 3)
+	parsePcap(pcapFile, &outputPath, totalWorkers, 0, -1, 0x28)
 	endTime := time.Now()
 
 	fmt.Println(totalWorkers, "Workers Execution Time", endTime.Sub(startTime))
