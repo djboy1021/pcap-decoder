@@ -27,12 +27,12 @@ type Point struct {
 }
 
 // ParsePCAP creates several go routines to start decoding the PCAP file.
-func ParsePCAP(pcapFile *string, outputPath *string, totalWorkers uint8, startFrame int, endFrame int, channels []string) {
+func ParsePCAP(pcapFile *string, outputPath *string, totalWorkers uint8, startFrame int, endFrame int, channels []string, isSaveAsJSON bool) {
 	var wg sync.WaitGroup
 	wg.Add(int(totalWorkers))
 
 	for workerIndex := uint8(0); workerIndex < totalWorkers; workerIndex++ {
-		go assignWorker(*pcapFile, workerIndex, totalWorkers, true, outputPath, startFrame, endFrame, channels, &wg)
+		go assignWorker(*pcapFile, workerIndex, totalWorkers, isSaveAsJSON, outputPath, startFrame, endFrame, channels, &wg)
 	}
 
 	wg.Wait()
@@ -75,9 +75,6 @@ func assignWorker(pcapFile string, workerIndex uint8, totalWorkers uint8, isSave
 	for i := range ip4s {
 		ip4channels[ip4s[i]] = iterationInfo{0, false, false, make([]Point, 0), make([]Point, 0), make([]byte, 0)}
 	}
-
-	// isDualMode = false
-	// timingOffsetTable = makeTimingOffsetTable(isDualMode)
 
 	totalPackets := 0
 	lidarPackets := 0
@@ -141,6 +138,7 @@ func assignWorker(pcapFile string, workerIndex uint8, totalWorkers uint8, isSave
 		lidarPackets++
 	}
 
+	// fmt.Println(totalPackets, lidarPackets, frameCount)
 	wg.Done()
 }
 

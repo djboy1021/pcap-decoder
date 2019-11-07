@@ -29,9 +29,10 @@ func main() {
 	endFrame := -1
 	mkdirp := false
 	isStatsOnly := false
+	isSaveAsJSON := false
 
 	// Get Commandline arguments
-	cli.GetArgs(&pcapFile, &outputPath, &startFrame, &endFrame, &mkdirp, &isStatsOnly)
+	cli.GetArgs(&pcapFile, &outputPath, &startFrame, &endFrame, &mkdirp, &isStatsOnly, &isSaveAsJSON)
 
 	// Check if PCAP file exists
 	if !path.Exists(pcapFile) {
@@ -65,7 +66,7 @@ func main() {
 		fmt.Println("Stats:", string(jsonBin))
 	} else {
 		channels := parsepcap.GetIP4Channels(&pcapFile)
-		parsepcap.ParsePCAP(&pcapFile, &outputPath, totalWorkers, startFrame, endFrame, channels)
+		parsepcap.ParsePCAP(&pcapFile, &outputPath, totalWorkers, startFrame, endFrame, channels, isSaveAsJSON)
 	}
 	endTime := time.Now()
 

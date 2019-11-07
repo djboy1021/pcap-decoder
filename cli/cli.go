@@ -7,7 +7,7 @@ import (
 )
 
 // GetArgs gets the command line input
-func GetArgs(pcapFile *string, outputPath *string, startFrame *int, endFrame *int, mkdirp *bool, isStatsOnly *bool) {
+func GetArgs(pcapFile *string, outputPath *string, startFrame *int, endFrame *int, mkdirp *bool, isStatsOnly *bool, isSaveAsJSON *bool) {
 	correctedArgs := make([]string, 0)
 
 	// resolves any strings that are cut due to some space
@@ -47,6 +47,12 @@ func GetArgs(pcapFile *string, outputPath *string, startFrame *int, endFrame *in
 					*isStatsOnly = true
 				} else {
 					*isStatsOnly, _ = strconv.ParseBool(value)
+				}
+			} else if strings.Contains(key, "json") {
+				if len(value) == 0 {
+					*isSaveAsJSON = true
+				} else {
+					*isSaveAsJSON, _ = strconv.ParseBool(value)
 				}
 			} else {
 				panic(key + " is not recognized as a valid input")
