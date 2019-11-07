@@ -1,7 +1,7 @@
 package parsepcap
 
 import (
-	"lidar/dictionary"
+	"pcap-decoder/dictionary"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"

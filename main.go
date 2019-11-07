@@ -3,9 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"lidar/cli"
-	"lidar/parsepcap"
-	"lidar/path"
+	"pcap-decoder/cli"
+	"pcap-decoder/parsepcap"
+	"pcap-decoder/path"
 	"runtime"
 	"time"
 )

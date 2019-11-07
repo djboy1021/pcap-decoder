@@ -2,7 +2,7 @@ package parsepcap
 
 import (
 	"encoding/binary"
-	"lidar/dictionary"
+	"pcap-decoder/dictionary"
 	"math"
 )
 
