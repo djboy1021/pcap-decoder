@@ -26,3 +26,7 @@ var VLP32ElevationAngles = []int16{-25000, -1000, -1667, -15639, -11310, 0, -667
 // VLP32AzimuthOffset is an array of the VLP32 azimuth offset angles
 var VLP32AzimuthOffset = []int16{1400, -4200, 1400, -1400, 1400, -1400, 4200, -1400, 1400, -4200, 1400, -1400, 4200, -1400,
 	4200, -1400, 1400, 4200, 1400, -4200, 4200, -1400, 1400, -1400, 1400, -1400, 1400, -4200, 4200, -1400, 1400, -1400}
+
+func vlp32MakeTable(isDualMode bool){
+	fullFiringCycle := 55296
+}
