@@ -2,8 +2,8 @@ package parsepcap
 
 import (
 	"encoding/binary"
+	"lidar/dictionary"
 	"math"
-	"pcap-decoder/dictionary"
 )
 
 func getTime(packetData *[]byte) uint32 {
