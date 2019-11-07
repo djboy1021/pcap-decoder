@@ -1,11 +1,15 @@
 package parsepcap
 
+import (
+	"fmt"
+	"lidar/dictionary"
+)
+
 func decodeBlocks(mergedPoints *[]Point, ip4Channel *iterationInfo, nextPacketData *[]byte, workerIndex uint8, totalWorkers uint8,
 	endFrame *int, startFrame *int) {
 	productID := getProductID(&((*ip4Channel).currPacketData))
 
 	for colIndex := uint8(0); colIndex < 12; colIndex++ {
-		// firingTime := getTime(&((*ip4Channel).currPacketData))
 		currAzimuth, nextAzimuth := getCurrentAndNextRawAzimuths(&((*ip4Channel).currPacketData), nextPacketData, colIndex)
 
 		// Check if new frame
@@ -45,7 +49,8 @@ func decodeBlocks(mergedPoints *[]Point, ip4Channel *iterationInfo, nextPacketDa
 
 			newPoint := Point{Distance: distance, LidarModel: productID,
 				X: X, Y: Y, Z: Z, Intensity: reflectivity,
-				Azimuth: azimuth, LaserID: laserID}
+				Azimuth: azimuth, LaserID: laserID,
+				Timestamp: getTimeStamp(&((*ip4Channel).currPacketData), rowIndex, colIndex)}
 
 			// If there is a new frame, save the points to the next frame
 			if (*ip4Channel).isReady {
@@ -55,4 +60,15 @@ func decodeBlocks(mergedPoints *[]Point, ip4Channel *iterationInfo, nextPacketDa
 			}
 		}
 	}
+}
+
+func getTimeStamp(data *[]byte, rowIndex uint8, colIndex uint8) uint32 {
+	productID := getProductID(data)
+	firingTime := getTime(data)
+	fmt.Println(firingTime)
+	if productID == 0x28 {
+		return firingTime + dictionary.SingleModeVLP32TimingOffsetTable[rowIndex][colIndex]
+	}
+
+	return firingTime
 }
