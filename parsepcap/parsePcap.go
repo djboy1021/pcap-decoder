@@ -141,7 +141,6 @@ func assignWorker(pcapFile string, workerIndex uint8, totalWorkers uint8, isSave
 		lidarPackets++
 	}
 
-	// fmt.Println(totalPackets, lidarPackets, frameCount)
 	wg.Done()
 }
 
