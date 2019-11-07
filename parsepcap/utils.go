@@ -123,8 +123,16 @@ func getLaserID(productID byte, rowIndex uint8) uint8 {
 func getTimeStamp(data *[]byte, rowIndex uint8, colIndex uint8) uint32 {
 	productID := getProductID(data)
 	firingTime := getTime(data)
+
 	if productID == 0x28 {
 		return firingTime + dictionary.SingleModeVLP32TimingOffsetTable[rowIndex][colIndex]
+	}
+
+	switch productID {
+	case 0x28:
+		return firingTime + dictionary.SingleModeVLP32TimingOffsetTable[rowIndex][colIndex]
+	case 0x22:
+		return firingTime + dictionary.SingleModeVLP16TimingOffsetTable[rowIndex][colIndex]
 	}
 
 	return firingTime

@@ -29,10 +29,14 @@ var VLP32ElevationAngles = []int16{-25000, -1000, -1667, -15639, -11310, 0, -667
 var VLP32AzimuthOffset = []int16{1400, -4200, 1400, -1400, 1400, -1400, 4200, -1400, 1400, -4200, 1400, -1400, 4200, -1400,
 	4200, -1400, 1400, 4200, 1400, -4200, 4200, -1400, 1400, -1400, 1400, -1400, 1400, -4200, 4200, -1400, 1400, -1400}
 
-// SingleModeVLP32TimingOffsetTable is a lookup table for determining the timing offset of points
-var SingleModeVLP32TimingOffsetTable = makevlp32TimingOffsetTable(false)
+// SingleModeVLP16TimingOffsetTable is a lookup table for VLP16
+var SingleModeVLP16TimingOffsetTable = MakeTimingOffsetTable(false, 0x22)
 
-func makevlp32TimingOffsetTable(isDualMode bool) [32][12]uint32 {
+// SingleModeVLP32TimingOffsetTable is a lookup table for VLP32
+var SingleModeVLP32TimingOffsetTable = MakeTimingOffsetTable(false, 0x28)
+
+// MakeTimingOffsetTable creates an offset timing table
+func MakeTimingOffsetTable(isDualMode bool, productID byte) [32][12]uint32 {
 	var timingOffsets [32][12]uint32
 
 	// unit is µs (microsec)
@@ -44,13 +48,32 @@ func makevlp32TimingOffsetTable(isDualMode bool) [32][12]uint32 {
 	for x := 0; x < 12; x++ {
 		for y := 0; y < 32; y++ {
 			if isDualMode {
-				dataBlockIndex = x / 2
-			} else {
-				dataBlockIndex = x
-			}
-			dataPointIndex = y / 2
-			offset := fullFiringCycle*float32(dataBlockIndex) + singleFiring*float32(dataPointIndex)
+				// Dual Mode
+				switch productID {
+				case 0x28:
+					dataBlockIndex = x / 2
+				case 0x22:
+					dataBlockIndex = (x - (x % 2)) + (y / 16)
+				}
 
+			} else {
+				// Single Mode
+				switch productID {
+				case 0x28:
+					dataBlockIndex = x
+				case 0x22:
+					dataBlockIndex = (x * 2) + (y / 16)
+				}
+			}
+
+			switch productID {
+			case 0x28:
+				dataPointIndex = y / 2
+			case 0x22:
+				dataPointIndex = y % 16
+			}
+
+			offset := fullFiringCycle*float32(dataBlockIndex) + singleFiring*float32(dataPointIndex)
 			timingOffsets[y][x] = uint32(math.Round(float64(offset)))
 		}
 	}
