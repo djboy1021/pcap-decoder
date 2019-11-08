@@ -99,5 +99,4 @@ func main() {
 	} else {
 		printHelp()
 	}
-
 }

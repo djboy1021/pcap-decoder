@@ -25,6 +25,12 @@ func GetProductID(id byte) string {
 var VLP32ElevationAngles = []int16{-25000, -1000, -1667, -15639, -11310, 0, -667, -8843, -7254, 333, -333,
 	-6148, -5333, 1333, 667, -4000, -4667, 1667, 1000, -3667, -3333, 3333, 2333, -2667, -3000, 7000, 4667, -2333, -2000, 15000, 10333, -1333}
 
+// VLP16ElevationAngles is an array of the VLP32 elevation angles
+var VLP16ElevationAngles = []int16{1500, 100, -1300, 300, -1100, 500, -900, 700, -700, 900, -500, 1100, -300, 1300, -100, 1500}
+
+// VLP16VerticalCOrrection is an array of the VLP32 vertical corrections in mm
+var VLP16VerticalCOrrection = []int8{112, -07, 97, -22, 81, -37, 66, -51, 51, -66, 37, -81, 22, -97, 07, -112}
+
 // VLP32AzimuthOffset is an array of the VLP32 azimuth offset angles
 var VLP32AzimuthOffset = []int16{1400, -4200, 1400, -1400, 1400, -1400, 4200, -1400, 1400, -4200, 1400, -1400, 4200, -1400,
 	4200, -1400, 1400, 4200, 1400, -4200, 4200, -1400, 1400, -1400, 1400, -1400, 1400, -4200, 4200, -1400, 1400, -1400}

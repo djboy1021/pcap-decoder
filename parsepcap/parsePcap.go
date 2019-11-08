@@ -131,6 +131,8 @@ func assignWorker(pcapFile string, workerIndex uint8, totalWorkers uint8, isSave
 				filename := path.Join(*outputFolder, basename+".json")
 				savePointsToJSON(&mergedPoints, filename)
 			}
+			// Save as image
+			savePointsToPNG(&mergedPoints)
 
 			mergedPoints = nil
 		}
@@ -158,4 +160,40 @@ func check(e error) {
 	if e != nil {
 		panic(e)
 	}
+}
+
+func savePointsToPNG(points *[]Point) {
+	const MaxUint = ^uint(0)
+	const MinUint = 0
+	const MaxInt = int(MaxUint >> 1)
+	const MinInt = -MaxInt - 1
+
+	xMax := MinInt
+	xMin := MaxInt
+	yMax := MinInt
+	yMin := MaxInt
+	zMax := MinInt
+	zMin := MaxInt
+	for i := range *points {
+		if (*points)[i].X > xMax {
+			xMax = (*points)[i].X
+		}
+		if (*points)[i].X < xMin {
+			xMin = (*points)[i].X
+		}
+		if (*points)[i].Y > yMax {
+			yMax = (*points)[i].Y
+		}
+		if (*points)[i].Y < yMin {
+			yMin = (*points)[i].Y
+		}
+		if (*points)[i].Z > zMax {
+			zMax = (*points)[i].Z
+		}
+		if (*points)[i].Z < zMin {
+			zMin = (*points)[i].Z
+		}
+	}
+
+	fmt.Println(xMax, xMin, yMax, yMin, zMax, zMin)
 }

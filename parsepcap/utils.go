@@ -2,8 +2,8 @@ package parsepcap
 
 import (
 	"encoding/binary"
-	"pcap-decoder/dictionary"
 	"math"
+	"pcap-decoder/dictionary"
 )
 
 func getTime(packetData *[]byte) uint32 {
@@ -90,14 +90,28 @@ func rad(degrees float64) float64 {
 	return degrees * math.Pi / 180
 }
 
-func getXYZCoordinates(distance *uint32, azimuth uint16, productID byte, rowIndex uint8) (int, int, int) {
+func getElevationAngle(productID byte, rowIndex uint8) float64 {
 	var elevAngle float64
+
+	switch productID {
+	case 0x22:
+		elevAngle = float64(dictionary.VLP16ElevationAngles[rowIndex%16]) / 1000
+	case 0x28:
+		elevAngle = float64(dictionary.VLP32ElevationAngles[rowIndex]) / 1000
+	}
+
+	return elevAngle
+}
+
+func getXYZCoordinates(distance *uint32, azimuth uint16, productID byte, rowIndex uint8) (int, int, int) {
 	var azimuthOffset float64
 
 	if productID == 0x28 {
-		elevAngle = float64(dictionary.VLP32ElevationAngles[rowIndex]) / 1000
 		azimuthOffset = float64(dictionary.VLP32AzimuthOffset[rowIndex]) / 1000
 	}
+
+	elevAngle := getElevationAngle(productID, rowIndex)
+
 
 	cosEl := math.Cos(rad((elevAngle)))
 	sinEl := math.Sin(rad((elevAngle)))
