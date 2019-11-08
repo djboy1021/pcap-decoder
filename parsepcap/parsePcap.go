@@ -3,6 +3,9 @@ package parsepcap
 import (
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"path"
 	"strconv"
@@ -126,13 +129,13 @@ func assignWorker(pcapFile string, workerIndex uint8, totalWorkers uint8, isSave
 			}
 
 			// Do something on the merged points
+			basename := fmt.Sprintf("frame" + strconv.Itoa(ip4channels[ip4s[0]].frameCount-1))
+			filename := path.Join(*outputFolder, basename)
 			if isSaveAsJSON {
-				basename := fmt.Sprintf("frame" + strconv.Itoa(ip4channels[ip4s[0]].frameCount-1))
-				filename := path.Join(*outputFolder, basename+".json")
-				savePointsToJSON(&mergedPoints, filename)
+				savePointsToJSON(&mergedPoints, filename+".json")
 			}
 			// Save as image
-			savePointsToPNG(&mergedPoints)
+			savePointsToPNG(&mergedPoints, filename+".png")
 
 			mergedPoints = nil
 		}
@@ -162,7 +165,36 @@ func check(e error) {
 	}
 }
 
-func savePointsToPNG(points *[]Point) {
+func savePointsToPNG(points *[]Point, filename string) {
+	Xr := [2]int{-10000, 10000}
+	Yr := [2]int{-10000, 10000}
+	Zr := [2]int{-5000, 10000}
+
+	unit := 20
+
+	m := image.NewGray16(image.Rect(Xr[0]/unit, Yr[0]/unit, Xr[1]/unit, Yr[1]/unit))
+	for _, point := range *points {
+		isWithinX := point.X >= Xr[0] && point.X < Xr[1]
+		isWithinY := point.Y >= Yr[0] && point.Y < Yr[1]
+		isWithinZ := point.Z >= Zr[0] && point.Z < Zr[1]
+
+		if isWithinX && isWithinY && isWithinZ {
+			colorIntensity := 0xFFFF * (point.Z - Zr[0]) / (Zr[1] - Zr[0])
+			m.Set(point.X/unit, point.Y/unit, color.Gray16{uint16(colorIntensity)})
+		}
+	}
+
+	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer f.Close()
+	png.Encode(f, m)
+
+}
+
+func determineCloudSize(points *[]Point) {
 	const MaxUint = ^uint(0)
 	const MinUint = 0
 	const MaxInt = int(MaxUint >> 1)
