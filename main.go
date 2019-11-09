@@ -1,12 +1,9 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"pcap-decoder/cli"
-	"pcap-decoder/parsepcap"
 	"pcap-decoder/path"
-	"runtime"
 	"time"
 )
 
@@ -47,9 +44,12 @@ func printHelp() {
 	fmt.Println("    --mkdirp      <boolean, true/false>")
 	fmt.Println("    --startFrame  <integer, 0 for first frame>")
 	fmt.Println("    --endFrame    <integer, -1 for last frame>")
-	fmt.Println("    --mkdirp      <integer>")
-	fmt.Println("    --isStatsOnly <boolean>")
-	fmt.Println("    --json        <boolean>")
+
+	fmt.Println("    --mkdirp")
+	fmt.Println("    --isStatsOnly")
+	fmt.Println("    --json")
+	fmt.Println("    --png")
+
 	fmt.Println("")
 	fmt.Println("Sample:")
 	fmt.Println("./pcap-decoder.exe --pcapFile V:/JP01/DataLake/Common_Write/KEEP_Magic_Hat_GT/RTB_DC/External_Shared_Data/city.pcap --outputPath V:/JP01/DataLake/Common_Write/KEEP_Magic_Hat_GT/RTB_DC/External_Shared_Data --mkdirp false --startFrame 0 --endFrame 12 --json true")
@@ -57,46 +57,39 @@ func printHelp() {
 }
 
 func main() {
-	// Default values
-	pcapFile := ""
-	outputPath := ""
-	startFrame := 0
-	endFrame := -1
-	mkdirp := false
-	isStatsOnly := false
-	isSaveAsJSON := false
+	// Set Commandline arguments global variables
+	cli.SetUserInput()
 
-	// Get Commandline arguments
-	cli.GetArgs(&pcapFile, &outputPath, &startFrame, &endFrame, &mkdirp, &isStatsOnly, &isSaveAsJSON)
+	fmt.Println(cli.UserInput)
 
-	// Allocate number of workers
-	totalWorkers := uint8(runtime.NumCPU() / 2)
-	if endFrame < 0 || int(totalWorkers) < (endFrame-startFrame) { //if all frames
-		totalWorkers = uint8(runtime.NumCPU() / 2)
-	} else if endFrame > startFrame { //if number of frames is less than cpu cores
-		totalWorkers = uint8(endFrame - startFrame)
-	} else { // if only one frame
-		totalWorkers = uint8(1)
-	}
+	// // Allocate number of workers
+	// totalWorkers := uint8(runtime.NumCPU() / 2)
+	// if endFrame < 0 || int(totalWorkers) < (endFrame-startFrame) { //if all frames
+	// 	totalWorkers = uint8(runtime.NumCPU() / 2)
+	// } else if endFrame > startFrame { //if number of frames is less than cpu cores
+	// 	totalWorkers = uint8(endFrame - startFrame)
+	// } else { // if only one frame
+	// 	totalWorkers = uint8(1)
+	// }
 
-	// Start decoding the PCAP file
-	startTime := time.Now()
-	if isStatsOnly {
-		pcapStats := parsepcap.GetStats(&pcapFile)
-		jsonBin, _ := json.Marshal(pcapStats)
-		fmt.Println("Stats:", string(jsonBin))
-	} else if len(pcapFile) > 0 && len(outputPath) > 0 && isSaveAsJSON {
-		// Check if paths are valid
-		validatePaths(&pcapFile, &outputPath, mkdirp)
+	// // Start decoding the PCAP file
+	// startTime := time.Now()
+	// if isStatsOnly {
+	// 	pcapStats := parsepcap.GetStats(&pcapFile)
+	// 	jsonBin, _ := json.Marshal(pcapStats)
+	// 	fmt.Println("Stats:", string(jsonBin))
+	// } else if len(pcapFile) > 0 && len(outputPath) > 0 && isSaveAsJSON {
+	// 	// Check if paths are valid
+	// 	validatePaths(&pcapFile, &outputPath, mkdirp)
 
-		// Check IP addresses of the packets
-		channels := parsepcap.GetIP4Channels(&pcapFile)
-		parsepcap.ParsePCAP(&pcapFile, &outputPath, totalWorkers, startFrame, endFrame, channels, isSaveAsJSON)
+	// 	// Check IP addresses of the packets
+	// 	channels := parsepcap.GetIP4Channels(&pcapFile)
+	// 	parsepcap.ParsePCAP(&pcapFile, &outputPath, totalWorkers, startFrame, endFrame, channels, isSaveAsJSON)
 
-		// Display Summary
-		endTime := time.Now()
-		printSummary(&pcapFile, &outputPath, &startFrame, &endFrame, &startTime, &endTime, &mkdirp, &isStatsOnly)
-	} else {
-		printHelp()
-	}
+	// 	// Display Summary
+	// 	endTime := time.Now()
+	// 	printSummary(&pcapFile, &outputPath, &startFrame, &endFrame, &startTime, &endTime, &mkdirp, &isStatsOnly)
+	// } else {
+	// 	printHelp()
+	// }
 }
