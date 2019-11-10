@@ -2,27 +2,35 @@ package cli
 
 import (
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // CLInput contains the command line inputs of the user
 type CLInput struct {
-	pcapFile     string
-	outputPath   string
-	startFrame   int
-	endFrame     int
-	mkdirp       bool
-	isStatsOnly  bool
-	isSaveAsJSON bool
-	isSaveAsPNG  bool
+	PcapFile     string
+	OutputPath   string
+	StartFrame   int
+	EndFrame     int
+	Mkdirp       bool
+	IsStatsOnly  bool
+	IsSaveAsJSON bool
+	IsSaveAsPNG  bool
+	TotalWorkers uint8
+	StartTime    time.Time
+	Channels     []string
 }
 
 // UserInput is the global variable containing the user inputs
-var UserInput = CLInput{endFrame: -1}
+var UserInput = CLInput{EndFrame: -1}
 
 // SetUserInput gets the command line input
 func SetUserInput() {
+	// Set start time
+	UserInput.StartTime = time.Now()
+
 	correctedArgs := make([]string, 0)
 
 	// resolves any strings that are cut due to some space
@@ -49,21 +57,21 @@ func SetUserInput() {
 
 			switch key {
 			case "pcapFile":
-				UserInput.pcapFile = value
+				UserInput.PcapFile = value
 			case "outputPath":
-				UserInput.outputPath = value
+				UserInput.OutputPath = value
 			case "startFrame":
-				UserInput.startFrame, err = strconv.Atoi(value)
+				UserInput.StartFrame, err = strconv.Atoi(value)
 			case "endFrame":
-				UserInput.endFrame, err = strconv.Atoi(value)
+				UserInput.EndFrame, err = strconv.Atoi(value)
 			case "mkdirp":
-				setArgValue(&(UserInput.mkdirp), key, value)
+				setArgValue(&(UserInput.Mkdirp), key, value)
 			case "statsOnly":
-				setArgValue(&(UserInput.isStatsOnly), key, value)
+				setArgValue(&(UserInput.IsStatsOnly), key, value)
 			case "json":
-				setArgValue(&(UserInput.isSaveAsJSON), key, value)
+				setArgValue(&(UserInput.IsSaveAsJSON), key, value)
 			case "png":
-				setArgValue(&(UserInput.isSaveAsPNG), key, value)
+				setArgValue(&(UserInput.IsSaveAsPNG), key, value)
 			default:
 				panic(key + " is not recognized as a valid input")
 			}
@@ -75,6 +83,28 @@ func SetUserInput() {
 			panic("Syntax Error")
 		}
 	}
+
+	// Set Total Workers
+	setTotalWorkers()
+
+	// Set Channels
+	// setChannels()
+}
+
+func setTotalWorkers() {
+	// Allocate number of workers
+	totalWorkers := uint8(runtime.NumCPU() / 2)
+	startFrame := UserInput.StartFrame
+	endFrame := UserInput.EndFrame
+	if endFrame < 0 || int(totalWorkers) < (endFrame-startFrame) { //if all frames
+		totalWorkers = uint8(runtime.NumCPU() / 2)
+	} else if endFrame > startFrame { //if number of frames is less than cpu cores
+		totalWorkers = uint8(endFrame - startFrame)
+	} else { // if only one frame
+		totalWorkers = uint8(1)
+	}
+
+	UserInput.TotalWorkers = totalWorkers
 }
 
 func setArgValue(parameter *bool, key string, value string) {

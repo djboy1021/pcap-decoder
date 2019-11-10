@@ -2,6 +2,7 @@ package parsepcap
 
 import (
 	"pcap-decoder/dictionary"
+	"pcap-decoder/cli"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
@@ -22,10 +23,10 @@ type PCAPStats struct {
 }
 
 // GetStats provides the number of packets, lidarpackets, and position packets in a PCAP file
-func GetStats(pcapFile *string) PCAPStats {
+func GetStats() PCAPStats {
 	var pcapStats PCAPStats
 
-	handle, err := pcap.OpenOffline(*pcapFile)
+	handle, err := pcap.OpenOffline(cli.UserInput.PcapFile)
 	if err != nil {
 		panic(err)
 	}

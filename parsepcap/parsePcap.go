@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"os"
 	"path"
+	"pcap-decoder/cli"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,12 +31,12 @@ type Point struct {
 }
 
 // ParsePCAP creates several go routines to start decoding the PCAP file.
-func ParsePCAP(pcapFile *string, outputPath *string, totalWorkers uint8, startFrame int, endFrame int, channels []string, isSaveAsJSON bool) {
+func ParsePCAP() {
 	var wg sync.WaitGroup
-	wg.Add(int(totalWorkers))
+	wg.Add(int(cli.UserInput.TotalWorkers))
 
-	for workerIndex := uint8(0); workerIndex < totalWorkers; workerIndex++ {
-		go assignWorker(*pcapFile, workerIndex, totalWorkers, isSaveAsJSON, outputPath, startFrame, endFrame, channels, &wg)
+	for workerIndex := uint8(0); workerIndex < cli.UserInput.TotalWorkers; workerIndex++ {
+		go assignWorker(workerIndex, &wg)
 	}
 
 	wg.Wait()
@@ -67,7 +68,14 @@ type iterationInfo struct {
 	currPacketData []byte
 }
 
-func assignWorker(pcapFile string, workerIndex uint8, totalWorkers uint8, isSaveAsJSON bool, outputFolder *string, startFrame int, endFrame int, ip4s []string, wg *sync.WaitGroup) {
+func assignWorker(workerIndex uint8, wg *sync.WaitGroup) {
+	pcapFile := cli.UserInput.PcapFile
+	channels := cli.UserInput.Channels
+	totalWorkers := cli.UserInput.TotalWorkers
+	startFrame := cli.UserInput.StartFrame
+	endFrame := cli.UserInput.EndFrame
+	outputFolder := cli.UserInput.OutputPath
+
 	handle, err := pcap.OpenOffline(pcapFile)
 	if err != nil {
 		panic(err)
@@ -75,8 +83,8 @@ func assignWorker(pcapFile string, workerIndex uint8, totalWorkers uint8, isSave
 	packets := gopacket.NewPacketSource(handle, handle.LinkType()).Packets()
 
 	ip4channels := make(map[string]iterationInfo)
-	for i := range ip4s {
-		ip4channels[ip4s[i]] = iterationInfo{0, false, false, make([]Point, 0), make([]Point, 0), make([]byte, 0)}
+	for i := range channels {
+		ip4channels[channels[i]] = iterationInfo{0, false, false, make([]Point, 0), make([]Point, 0), make([]byte, 0)}
 	}
 
 	totalPackets := 0
@@ -111,31 +119,34 @@ func assignWorker(pcapFile string, workerIndex uint8, totalWorkers uint8, isSave
 		ip4channels[ip4] = channel
 
 		areAllChannelsReady := true
-		for i := range ip4s {
-			if !ip4channels[ip4s[i]].isReady {
+		for i := range channels {
+			if !ip4channels[channels[i]].isReady {
 				areAllChannelsReady = false
 			}
 		}
 
 		if areAllChannelsReady {
-			for i := range ip4s {
-				mergedPoints = append(mergedPoints, ip4channels[ip4s[i]].currPoints...)
-				channel = ip4channels[ip4s[i]]
+			for i := range channels {
+				mergedPoints = append(mergedPoints, ip4channels[channels[i]].currPoints...)
+				channel = ip4channels[channels[i]]
 				channel.currPoints = channel.nextPoints
 				channel.nextPoints = nil
 				channel.isReady = false
 
-				ip4channels[ip4s[i]] = channel
+				ip4channels[channels[i]] = channel
 			}
 
 			// Do something on the merged points
-			basename := fmt.Sprintf("frame" + strconv.Itoa(ip4channels[ip4s[0]].frameCount-1))
-			filename := path.Join(*outputFolder, basename)
-			if isSaveAsJSON {
+			basename := fmt.Sprintf("frame" + strconv.Itoa(ip4channels[channels[0]].frameCount-1))
+			filename := path.Join(outputFolder, basename)
+			if cli.UserInput.IsSaveAsJSON {
 				savePointsToJSON(&mergedPoints, filename+".json")
 			}
+
 			// Save as image
-			savePointsToPNG(&mergedPoints, filename+".png")
+			if cli.UserInput.IsSaveAsPNG {
+				savePointsToPNG(&mergedPoints, filename+".png")
+			}
 
 			mergedPoints = nil
 		}

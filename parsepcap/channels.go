@@ -1,16 +1,18 @@
 package parsepcap
 
 import (
+	"pcap-decoder/cli"
+
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
 )
 
 // GetIP4Channels return unique IPV4 Addresses from a PCAP file
-func GetIP4Channels(pcapFile *string) []string {
+func GetIP4Channels() []string {
 	channels := make([]string, 0)
 	channelMap := make(map[string]uint8)
 
-	handle, err := pcap.OpenOffline(*pcapFile)
+	handle, err := pcap.OpenOffline(cli.UserInput.PcapFile)
 	if err != nil {
 		panic(err)
 	}
