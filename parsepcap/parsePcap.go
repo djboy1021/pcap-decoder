@@ -71,9 +71,6 @@ type iterationInfo struct {
 func assignWorker(workerIndex uint8, wg *sync.WaitGroup) {
 	pcapFile := cli.UserInput.PcapFile
 	channels := cli.UserInput.Channels
-	totalWorkers := cli.UserInput.TotalWorkers
-	startFrame := cli.UserInput.StartFrame
-	endFrame := cli.UserInput.EndFrame
 	outputFolder := cli.UserInput.OutputPath
 
 	handle, err := pcap.OpenOffline(pcapFile)
@@ -108,7 +105,7 @@ func assignWorker(workerIndex uint8, wg *sync.WaitGroup) {
 
 		if len(ip4channels[ip4].currPacketData) == 1248 {
 			// decode blocks
-			decodeBlocks(&mergedPoints, &channel, &nextPacketData, workerIndex, totalWorkers, &endFrame, &startFrame)
+			decodeBlocks(&mergedPoints, &channel, &nextPacketData, workerIndex)
 			ip4channels[ip4] = channel
 
 			if ip4channels[ip4].isFinished {

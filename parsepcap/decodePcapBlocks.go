@@ -1,8 +1,12 @@
 package parsepcap
 
-func decodeBlocks(mergedPoints *[]Point, ip4Channel *iterationInfo, nextPacketData *[]byte, workerIndex uint8, totalWorkers uint8,
-	endFrame *int, startFrame *int) {
+import "pcap-decoder/cli"
+
+func decodeBlocks(mergedPoints *[]Point, ip4Channel *iterationInfo, nextPacketData *[]byte, workerIndex uint8) {
 	productID := getProductID(&((*ip4Channel).currPacketData))
+	totalWorkers := cli.UserInput.TotalWorkers
+	startFrame := cli.UserInput.StartFrame
+	endFrame := cli.UserInput.EndFrame
 
 	for colIndex := uint8(0); colIndex < 12; colIndex++ {
 		// firingTime := getTime(&((*ip4Channel).currPacketData))
@@ -11,7 +15,7 @@ func decodeBlocks(mergedPoints *[]Point, ip4Channel *iterationInfo, nextPacketDa
 		// Check if new frame
 		if currAzimuth > nextAzimuth && currAzimuth > 35900 && nextAzimuth < 150 {
 			// if firingTime-*prevFiringTime >= 55296 {
-			(*ip4Channel).isFinished = ((*ip4Channel).frameCount >= *endFrame) && (*endFrame > 0)
+			(*ip4Channel).isFinished = ((*ip4Channel).frameCount >= endFrame) && (endFrame > 0)
 			if (*ip4Channel).isFinished {
 				return
 			}
@@ -27,7 +31,7 @@ func decodeBlocks(mergedPoints *[]Point, ip4Channel *iterationInfo, nextPacketDa
 		}
 
 		// Check if frame will be assigned to the worker, otherwise skip the packet
-		isDecode := (*ip4Channel).frameCount%int(totalWorkers) == int(workerIndex) && (*ip4Channel).frameCount >= *startFrame
+		isDecode := (*ip4Channel).frameCount%int(totalWorkers) == int(workerIndex) && (*ip4Channel).frameCount >= startFrame
 		if !isDecode {
 			continue
 		}
