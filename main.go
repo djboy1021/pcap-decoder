@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"pcap-decoder/cli"
 	"pcap-decoder/parsepcap"
 	"pcap-decoder/path"
@@ -17,7 +18,7 @@ func validatePaths() {
 	// Check if Output path exists
 	if !path.Exists(cli.UserInput.OutputPath) {
 		if cli.UserInput.Mkdirp {
-			fmt.Println("Output Path will be generated")
+			os.MkdirAll(cli.UserInput.OutputPath, os.ModePerm)
 		} else {
 			panic(cli.UserInput.OutputPath + " does not exist")
 		}
