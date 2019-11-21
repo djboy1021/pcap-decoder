@@ -17,7 +17,7 @@ import (
 	"github.com/google/gopacket/pcap"
 )
 
-// Point struct
+// Point contains the basic information of a Lidar point
 type Point struct {
 	LidarModel byte   `json:"lidarModel" bson:"lidarModel" form:"lidarModel" query:"lidarModel"` // product ID of the Lidar
 	LaserID    uint8  `json:"laserID" bson:"laserID" form:"laserID" query:"laserID"`             // aka channel ID [0:32]
@@ -28,6 +28,16 @@ type Point struct {
 	Azimuth    uint16 `json:"azimuth" bson:"azimuth" form:"azimuth" query:"azimuth"`             // in degree * 100
 	Intensity  uint8  `json:"intensity" bson:"intensity" form:"intensity" query:"intensity"`     // 0 to 255
 	Timestamp  uint32 `json:"timestamp" bson:"timestamp" form:"timestamp" query:"timestamp"`     // µs
+}
+
+type iterationInfo struct {
+	frameCount     int
+	isFinished     bool
+	isReady        bool
+	currPoints     []Point
+	nextPoints     []Point
+	currPacketData []byte
+	ipaddress      string
 }
 
 // ParsePCAP creates several go routines to start decoding the PCAP file.
@@ -59,15 +69,6 @@ func getIPv4(pcapString string) string {
 	return srcIP
 }
 
-type iterationInfo struct {
-	frameCount     int
-	isFinished     bool
-	isReady        bool
-	currPoints     []Point
-	nextPoints     []Point
-	currPacketData []byte
-}
-
 func assignWorker(workerIndex uint8, wg *sync.WaitGroup) {
 	pcapFile := cli.UserInput.PcapFile
 	channels := cli.UserInput.Channels
@@ -81,7 +82,7 @@ func assignWorker(workerIndex uint8, wg *sync.WaitGroup) {
 
 	ip4channels := make(map[string]iterationInfo)
 	for i := range channels {
-		ip4channels[channels[i]] = iterationInfo{0, false, false, make([]Point, 0), make([]Point, 0), make([]byte, 0)}
+		ip4channels[channels[i]] = iterationInfo{0, false, false, make([]Point, 0), make([]Point, 0), make([]byte, 0), channels[i]}
 	}
 
 	totalPackets := 0
@@ -92,16 +93,20 @@ func assignWorker(workerIndex uint8, wg *sync.WaitGroup) {
 
 	var nextPacketData []byte
 
+	// var prevTime time.Time
+
 	for packet := range packets {
 		nextPacketData = packet.Data()
 
 		totalPackets++
-		if len(nextPacketData) != 1248 {
+
+		if !(len(nextPacketData) == 1248 || len(nextPacketData) == 554) {
 			continue
 		}
-
 		ip4 := getIPv4(packet.String())
 		channel := ip4channels[ip4]
+
+		// fmt.Println(packet.String())
 
 		if len(ip4channels[ip4].currPacketData) == 1248 {
 			// decode blocks
@@ -133,7 +138,7 @@ func assignWorker(workerIndex uint8, wg *sync.WaitGroup) {
 				ip4channels[channels[i]] = channel
 			}
 
-			// Do something on the merged points
+			// Save as JSON
 			basename := fmt.Sprintf("frame" + strconv.Itoa(ip4channels[channels[0]].frameCount-1))
 			filename := path.Join(outputFolder, basename)
 			if cli.UserInput.IsSaveAsJSON {

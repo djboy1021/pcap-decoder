@@ -1,6 +1,9 @@
 package parsepcap
 
-import "pcap-decoder/cli"
+import (
+	"pcap-decoder/calibration"
+	"pcap-decoder/cli"
+)
 
 func decodeBlocks(mergedPoints *[]Point, ip4Channel *iterationInfo, nextPacketData *[]byte, workerIndex uint8) {
 	productID := getProductID(&((*ip4Channel).currPacketData))
@@ -8,8 +11,13 @@ func decodeBlocks(mergedPoints *[]Point, ip4Channel *iterationInfo, nextPacketDa
 	startFrame := cli.UserInput.StartFrame
 	endFrame := cli.UserInput.EndFrame
 
+	translation := calibration.Lidars[ip4Channel.ipaddress].Translation
+	isTranslated := translation.X != 0 && translation.Y != 0 && translation.Z != 0
+
 	for colIndex := uint8(0); colIndex < 12; colIndex++ {
 		// firingTime := getTime(&((*ip4Channel).currPacketData))
+		// fmt.Println(firingTime)
+
 		currAzimuth, nextAzimuth := getCurrentAndNextRawAzimuths(&((*ip4Channel).currPacketData), nextPacketData, colIndex)
 
 		// Check if new frame
@@ -46,6 +54,10 @@ func decodeBlocks(mergedPoints *[]Point, ip4Channel *iterationInfo, nextPacketDa
 			azimuth := getPrecisionAzimuth(currAzimuth, nextAzimuth, rowIndex, productID)
 			X, Y, Z := getXYZCoordinates(&distance, azimuth, productID, rowIndex)
 			laserID := getLaserID(productID, rowIndex)
+
+			if isTranslated {
+				// fmt.Println(translation)
+			}
 
 			timeStamp := getTimeStamp(&((*ip4Channel).currPacketData), rowIndex, colIndex)
 

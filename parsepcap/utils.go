@@ -112,7 +112,6 @@ func getXYZCoordinates(distance *uint32, azimuth uint16, productID byte, rowInde
 
 	elevAngle := getElevationAngle(productID, rowIndex)
 
-
 	cosEl := math.Cos(rad((elevAngle)))
 	sinEl := math.Sin(rad((elevAngle)))
 	sinAzimuth := math.Sin(rad((azimuthOffset) + float64(azimuth)/100))
