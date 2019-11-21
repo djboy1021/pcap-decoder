@@ -3,6 +3,7 @@ package pcapparser
 import (
 	"fmt"
 	"pcap-decoder/cli"
+	"pcap-decoder/lib"
 	"time"
 
 	"github.com/google/gopacket"
@@ -22,12 +23,12 @@ func ParsePCAP() {
 
 		switch len(nextPacketData) {
 		case 1248:
-			// ipAddress := getIPv4(packet.String())
+			ipAddress := lib.GetIPv4(packet.String())
 			startTime := time.Now()
 			currentLP, err := NewLidarPacket(&nextPacketData)
 			check(err)
 
-			fmt.Println(currentLP.ProductID, time.Now().Sub(startTime))
+			fmt.Println(ipAddress, currentLP.ProductID, time.Now().Sub(startTime))
 		}
 	}
 }

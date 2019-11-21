@@ -23,7 +23,7 @@ func GetIP4Channels() []string {
 		if len(packet.Data()) != 1248 {
 			continue
 		}
-		ip4 := getIPv4(packet.String())
+		ip4 := GetIPv4(packet.String())
 
 		channelMap[ip4]++
 
@@ -37,7 +37,8 @@ func GetIP4Channels() []string {
 	return channels
 }
 
-func getIPv4(pcapString string) string {
+// GetIPv4 returns the IP address of the lidar packet
+func GetIPv4(pcapString string) string {
 	srcIP := ""
 	details := strings.Split(pcapString, "\n")
 
