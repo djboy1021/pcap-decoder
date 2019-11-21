@@ -35,6 +35,14 @@ type LidarChannel struct {
 	Reflectivity uint8  `json:"reflectivity"`
 }
 
+// SphericalPoint contains the point information in spherical system
+type SphericalPoint struct {
+	Distance  uint16
+	Azimuth   uint16
+	Bearing   int16
+	Intensity byte
+}
+
 // NewLidarPacket creates a new LidarPacket Object
 func NewLidarPacket(data *[]byte) (LidarPacket, error) {
 	var lp LidarPacket
@@ -56,8 +64,9 @@ func NewLidarPacket(data *[]byte) (LidarPacket, error) {
 	return lp, err
 }
 
-// GetPointCloud extracts the point cloud from the lidar packet
-func (lp *LidarPacket) GetPointCloud(nextPacketAzimuth uint16) {
+// SetPointCloud sets the point cloud of a ChannelInfo
+func (lp *LidarPacket) SetPointCloud(nextPacketAzimuth uint16, ci *ChannelInfo) {
+	prevAzimuth := ci.InitialAzimuth
 
 	for colIndex := uint8(0); colIndex < 12; colIndex++ {
 		currAzimuth := lp.Blocks[colIndex].Azimuth
@@ -69,9 +78,27 @@ func (lp *LidarPacket) GetPointCloud(nextPacketAzimuth uint16) {
 		}
 
 		for rowIndex := uint8(0); rowIndex < 32; rowIndex++ {
-			azimuth := getPrecisionAzimuth(currAzimuth, nextAzimuth, rowIndex, lp.ProductID)
-			distance := uint32(lp.Blocks[colIndex].Channels[rowIndex].Distance) << 2
-			fmt.Println(getXYZCoordinates(distance, azimuth, lp.ProductID, rowIndex))
+			distance := lp.Blocks[colIndex].Channels[rowIndex].Distance
+			if distance == 0 {
+				continue
+			}
+
+			point := SphericalPoint{
+				Intensity: lp.Blocks[colIndex].Channels[rowIndex].Reflectivity,
+				Distance:  distance,
+				Azimuth:   getPrecisionAzimuth(currAzimuth, nextAzimuth, rowIndex, lp.ProductID),
+				Bearing:   getRawElevationAngle(lp.ProductID, rowIndex)}
+
+			if ci.InitialAzimuth <= point.Azimuth && ci.InitialAzimuth > prevAzimuth {
+				// New Frame
+				ci.FrameIndex++
+				ci.Buffer = append(ci.Buffer, point)
+			} else {
+				ci.CurrentFrame = append(ci.CurrentFrame, point)
+			}
+
+			prevAzimuth = point.Azimuth
 		}
 	}
+
 }

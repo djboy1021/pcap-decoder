@@ -1,6 +1,7 @@
 package pcapparser
 
 import (
+	"fmt"
 	"pcap-decoder/cli"
 	"pcap-decoder/lib"
 
@@ -10,9 +11,11 @@ import (
 
 // ChannelInfo contains the iteration info of an IP address
 type ChannelInfo struct {
-	frameIndex     int
+	FrameIndex     uint
 	InitialAzimuth uint16
 	CurrentPacket  LidarPacket
+	CurrentFrame   []SphericalPoint
+	Buffer         []SphericalPoint
 }
 
 // ParsePCAP creates several go routines to start decoding the PCAP file.
@@ -53,8 +56,19 @@ func getPackets() (chan gopacket.Packet, error) {
 func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, addresses *[]ChannelInfo, nextPacketData *[]byte) {
 	ipAddress := lib.GetIPv4((*p).String())
 
+	// Parse packet in advance
+	nextPacket, err := NewLidarPacket(nextPacketData)
+	check(err)
+
 	if indexLookup[ipAddress] == 0 {
-		*addresses = append(*addresses, ChannelInfo{})
+		initialAzimuth := nextPacket.Blocks[0].Azimuth
+		if initialAzimuth == 0 {
+			initialAzimuth = 360
+		}
+
+		*addresses = append(*addresses, ChannelInfo{
+			FrameIndex:     0,
+			InitialAzimuth: initialAzimuth})
 		indexLookup[ipAddress] = uint8(len(*addresses))
 	}
 
@@ -62,14 +76,17 @@ func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, addresses *[
 	// Subtract 1 to the indexLookup value to correct the actual number
 	ipadd := &((*addresses)[indexLookup[ipAddress]-1])
 
-	// Parse packet in advance
-	nextPacket, err := NewLidarPacket(nextPacketData)
-	check(err)
-
 	// Wait for nonempty timestamp
 	if ipadd.CurrentPacket.TimeStamp > 0 {
-		ipadd.CurrentPacket.GetPointCloud(nextPacket.Blocks[0].Azimuth)
+		ipadd.CurrentPacket.SetPointCloud(
+			nextPacket.Blocks[0].Azimuth,
+			ipadd)
 
+		if len(ipadd.Buffer) > 0 {
+			fmt.Println("New Frame", ipadd.FrameIndex, len(ipadd.Buffer), len(ipadd.CurrentFrame))
+			ipadd.CurrentFrame = ipadd.Buffer
+			ipadd.Buffer = nil
+		}
 		// fmt.Println(nextPacket.TimeStamp, ipadd.CurrentPacket.TimeStamp)
 	}
 

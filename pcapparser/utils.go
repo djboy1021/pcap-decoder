@@ -76,6 +76,7 @@ func getXYZCoordinates(distance uint32, azimuth uint16, productID byte, rowIndex
 	return int(X), int(Y), int(Z)
 }
 
+// returns the elevation angle in degrees
 func getElevationAngle(productID byte, rowIndex uint8) float64 {
 	var elevAngle float64
 
@@ -84,6 +85,20 @@ func getElevationAngle(productID byte, rowIndex uint8) float64 {
 		elevAngle = float64(dictionary.VLP16ElevationAngles[rowIndex%16]) / 1000
 	case 0x28:
 		elevAngle = float64(dictionary.VLP32ElevationAngles[rowIndex]) / 1000
+	}
+
+	return elevAngle
+}
+
+// returns the elevation angle in degrees
+func getRawElevationAngle(productID byte, rowIndex uint8) int16 {
+	var elevAngle int16
+
+	switch productID {
+	case 0x22:
+		elevAngle = (dictionary.VLP16ElevationAngles[rowIndex%16])
+	case 0x28:
+		elevAngle = (dictionary.VLP32ElevationAngles[rowIndex])
 	}
 
 	return elevAngle
