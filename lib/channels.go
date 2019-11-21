@@ -2,11 +2,30 @@ package lib
 
 import (
 	"pcap-decoder/cli"
+	"strconv"
 	"strings"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
 )
+
+// IPAddress is an IPV4 address
+type IPAddress struct {
+	ByteAddress []uint8
+}
+
+// NewIPv4Address creates a new IPv4 address based from the string input
+func NewIPv4Address(address string) IPAddress {
+	ipadd := make([]uint8, 4)
+
+	for i, add := range strings.Split(address, ".") {
+		val, _ := strconv.ParseUint(add, 10, 8)
+
+		ipadd[i] = uint8(val)
+	}
+
+	return IPAddress{ByteAddress: ipadd}
+}
 
 // GetIP4Channels return unique IPV4 Addresses from a PCAP file
 func GetIP4Channels() []string {
@@ -52,5 +71,6 @@ func GetIPv4(pcapString string) string {
 			}
 		}
 	}
+
 	return srcIP
 }

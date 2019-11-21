@@ -55,3 +55,23 @@ func NewLidarPacket(data *[]byte) (LidarPacket, error) {
 
 	return lp, err
 }
+
+// GetPointCloud extracts the point cloud from the lidar packet
+func (lp *LidarPacket) GetPointCloud(nextPacketAzimuth uint16) {
+
+	for colIndex := uint8(0); colIndex < 12; colIndex++ {
+		currAzimuth := lp.Blocks[colIndex].Azimuth
+		var nextAzimuth uint16
+		if colIndex < 11 {
+			nextAzimuth = lp.Blocks[colIndex+1].Azimuth
+		} else {
+			nextAzimuth = nextPacketAzimuth
+		}
+
+		for rowIndex := uint8(0); rowIndex < 32; rowIndex++ {
+			azimuth := getPrecisionAzimuth(currAzimuth, nextAzimuth, rowIndex, lp.ProductID)
+			distance := uint32(lp.Blocks[colIndex].Channels[rowIndex].Distance) << 2
+			fmt.Println(getXYZCoordinates(distance, azimuth, lp.ProductID, rowIndex))
+		}
+	}
+}
