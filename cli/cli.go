@@ -114,3 +114,16 @@ func setArgValue(parameter *bool, key string, value string) {
 		*parameter, _ = strconv.ParseBool(value)
 	}
 }
+
+// OutputFiles returns the types of the output files
+func (cli CLInput) OutputFiles() []string {
+	var outputFiles []string
+	if cli.IsSaveAsJSON && !cli.IsStatsOnly {
+		outputFiles = append(outputFiles, "json")
+	}
+	if cli.IsSaveAsPNG && !cli.IsStatsOnly {
+		outputFiles = append(outputFiles, "png")
+	}
+
+	return outputFiles
+}

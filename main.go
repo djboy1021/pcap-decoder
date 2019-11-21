@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"pcap-decoder/cli"
+	"pcap-decoder/lib"
 	"pcap-decoder/parsepcap"
 	"pcap-decoder/path"
+	"pcap-decoder/pcapparser"
 )
 
 func validatePaths() {
@@ -41,10 +43,12 @@ func main() {
 
 		// Check available IP addresses of the packets
 		if cli.UserInput.Channels == nil {
-			cli.UserInput.Channels = parsepcap.GetIP4Channels()
+			cli.UserInput.Channels = lib.GetIP4Channels()
 		}
 
-		parsepcap.ParsePCAP()
+		pcapparser.ParsePCAP()
+
+		// parsepcap.ParsePCAP()
 
 		// Display Summary
 		cli.PrintSummary()

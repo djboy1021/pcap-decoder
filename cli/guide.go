@@ -31,6 +31,7 @@ func PrintHelp() {
 func PrintSummary() {
 	fmt.Println("     PcapFile:", UserInput.PcapFile)
 	fmt.Println("   OutputPath:", UserInput.OutputPath)
+	fmt.Println("  OutputFiles:", UserInput.OutputFiles())
 	fmt.Println("       Mkdirp:", UserInput.Mkdirp)
 	fmt.Println("   StartFrame:", UserInput.StartFrame)
 	fmt.Println("     EndFrame:", UserInput.EndFrame)

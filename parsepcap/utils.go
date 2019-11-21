@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"math"
 	"pcap-decoder/dictionary"
+	"strings"
 )
 
 func getTime(packetData *[]byte) uint32 {
@@ -149,4 +150,21 @@ func getTimeStamp(data *[]byte, rowIndex uint8, colIndex uint8) uint32 {
 	}
 
 	return firingTime
+}
+
+func getIPv4(pcapString string) string {
+	srcIP := ""
+	details := strings.Split(pcapString, "\n")
+
+	for _, detail := range details {
+		if strings.Contains(detail, "SrcIP") {
+			subDetails := strings.Split(detail, " ")
+			for _, subDetail := range subDetails {
+				if strings.Contains(subDetail, "SrcIP") {
+					srcIP = strings.Split(subDetail, "=")[1]
+				}
+			}
+		}
+	}
+	return srcIP
 }

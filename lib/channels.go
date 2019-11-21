@@ -1,7 +1,8 @@
-package parsepcap
+package lib
 
 import (
 	"pcap-decoder/cli"
+	"strings"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
@@ -36,3 +37,19 @@ func GetIP4Channels() []string {
 	return channels
 }
 
+func getIPv4(pcapString string) string {
+	srcIP := ""
+	details := strings.Split(pcapString, "\n")
+
+	for _, detail := range details {
+		if strings.Contains(detail, "SrcIP") {
+			subDetails := strings.Split(detail, " ")
+			for _, subDetail := range subDetails {
+				if strings.Contains(subDetail, "SrcIP") {
+					srcIP = strings.Split(subDetail, "=")[1]
+				}
+			}
+		}
+	}
+	return srcIP
+}

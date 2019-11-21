@@ -1,7 +1,6 @@
 package pointcloud
 
 import (
-	"fmt"
 	"math"
 )
 
@@ -82,7 +81,4 @@ func (pc CartesianPointCloud) Rotate(pitch float64, roll float64, yaw float64) {
 	pc.Azx = -sinb
 	pc.Azy = cosb * sinc
 	pc.Azz = cosb * cosc
-
-	
-
 }

@@ -10,7 +10,6 @@ import (
 	"path"
 	"pcap-decoder/cli"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/google/gopacket"
@@ -40,44 +39,14 @@ type iterationInfo struct {
 	ipaddress      string
 }
 
-// ParsePCAP creates several go routines to start decoding the PCAP file.
-func ParsePCAP() {
-	var wg sync.WaitGroup
-	wg.Add(int(cli.UserInput.TotalWorkers))
-
-	for workerIndex := uint8(0); workerIndex < cli.UserInput.TotalWorkers; workerIndex++ {
-		go assignWorker(workerIndex, &wg)
-	}
-
-	wg.Wait()
-}
-
-func getIPv4(pcapString string) string {
-	srcIP := ""
-	details := strings.Split(pcapString, "\n")
-
-	for _, detail := range details {
-		if strings.Contains(detail, "SrcIP") {
-			subDetails := strings.Split(detail, " ")
-			for _, subDetail := range subDetails {
-				if strings.Contains(subDetail, "SrcIP") {
-					srcIP = strings.Split(subDetail, "=")[1]
-				}
-			}
-		}
-	}
-	return srcIP
-}
-
 func assignWorker(workerIndex uint8, wg *sync.WaitGroup) {
 	pcapFile := cli.UserInput.PcapFile
 	channels := cli.UserInput.Channels
 	outputFolder := cli.UserInput.OutputPath
 
 	handle, err := pcap.OpenOffline(pcapFile)
-	if err != nil {
-		panic(err)
-	}
+	check(err)
+
 	packets := gopacket.NewPacketSource(handle, handle.LinkType()).Packets()
 
 	ip4channels := make(map[string]iterationInfo)
@@ -117,16 +86,17 @@ func assignWorker(workerIndex uint8, wg *sync.WaitGroup) {
 				break
 			}
 		}
+		// Update currect packet data
 		channel.currPacketData = nextPacketData
 		ip4channels[ip4] = channel
 
+		// Check if all channels are ready
 		areAllChannelsReady := true
 		for i := range channels {
 			if !ip4channels[channels[i]].isReady {
 				areAllChannelsReady = false
 			}
 		}
-
 		if areAllChannelsReady {
 			for i := range channels {
 				mergedPoints = append(mergedPoints, ip4channels[channels[i]].currPoints...)
