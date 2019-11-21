@@ -2,7 +2,6 @@ package pcapparser
 
 import (
 	"encoding/binary"
-	"fmt"
 )
 
 func check(err error) {
@@ -12,8 +11,7 @@ func check(err error) {
 }
 
 func isDualMode(packetData *[]byte) bool {
-	fmt.Println((*packetData)[1247])
-	return (*packetData)[1247] == 0x39
+	return (*packetData)[1246] == 0x57
 }
 
 func getProductID(packetData *[]byte) byte {
