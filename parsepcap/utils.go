@@ -63,11 +63,12 @@ func getPrecisionAzimuth(currAzimuth uint16, nextAzimuth uint16, rowIndex uint8,
 		azimuthGap = nextAzimuth - currAzimuth
 	}
 	var precisionAzimuth uint16
-	if productID == 0x28 {
+
+	switch productID {
+	case 0x28:
 		K := float64((1 + rowIndex) / 2)
 		precisionAzimuth = currAzimuth + uint16(math.Round(float64(azimuthGap)*K*0.04166667)) // 2.304/55.296 = 0.0416667
-
-	} else if productID == 0x22 {
+	case 0x22:
 		K := float64(rowIndex)
 		if rowIndex < 16 {
 			// Precision_Azimuth[K] := Azimuth[datablock_n] + (AzimuthGap * 2.304 μs * K) / 55.296 μs);
@@ -76,7 +77,7 @@ func getPrecisionAzimuth(currAzimuth uint16, nextAzimuth uint16, rowIndex uint8,
 			// Precision_Azimuth[K] := Azimuth[datablock_n] + (AzimuthGap * 2.304 μs * ((K-16) + 55.296 μs)) / (2 * 55.296 μs);
 			precisionAzimuth = currAzimuth + uint16((float64(azimuthGap)*(float64(K-16)+55.296))*0.02083333) // 2.304/55.296 = 0.0416667
 		}
-	} else {
+	default:
 		panic(string(productID) + "is not supported")
 	}
 

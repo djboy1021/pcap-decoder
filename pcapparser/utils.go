@@ -24,7 +24,7 @@ func getTime(packetData *[]byte) uint32 {
 	return binary.LittleEndian.Uint32((*packetData)[1242:1246])
 }
 
-func getPrecisionAzimuth(currAzimuth uint16, nextAzimuth uint16, rowIndex uint8, productID byte) uint16 {
+func getPrecisionAzimuth(currAzimuth uint16, nextAzimuth uint16, rowIndex uint8, productID byte) float32 {
 	var azimuthGap uint16
 
 	if nextAzimuth < currAzimuth {
@@ -32,6 +32,7 @@ func getPrecisionAzimuth(currAzimuth uint16, nextAzimuth uint16, rowIndex uint8,
 	} else {
 		azimuthGap = nextAzimuth - currAzimuth
 	}
+
 	var precisionAzimuth uint16
 	if productID == 0x28 {
 		K := float64((1 + rowIndex) / 2)
@@ -50,30 +51,16 @@ func getPrecisionAzimuth(currAzimuth uint16, nextAzimuth uint16, rowIndex uint8,
 		panic(string(productID) + "is not supported")
 	}
 
-	precisionAzimuth %= 36000
-
-	return precisionAzimuth
-}
-
-func getXYZCoordinates(distance uint32, azimuth uint16, productID byte, rowIndex uint8) (int, int, int) {
-	var azimuthOffset float64
-
+	var paFloat float32
 	if productID == 0x28 {
-		azimuthOffset = float64(dictionary.VLP32AzimuthOffset[rowIndex]) / 1000
+		paFloat = float32(precisionAzimuth)/100 + float32(dictionary.VLP32AzimuthOffset[rowIndex])/1000
 	}
 
-	elevAngle := getElevationAngle(productID, rowIndex)
+	if paFloat > 360 {
+		paFloat -= 360
+	}
 
-	cosEl := math.Cos(rad((elevAngle)))
-	sinEl := math.Sin(rad((elevAngle)))
-	sinAzimuth := math.Sin(rad((azimuthOffset) + float64(azimuth)/100))
-	cosAzimuth := math.Cos(rad((azimuthOffset) + float64(azimuth)/100))
-
-	X := math.Round(float64(distance) * cosEl * sinAzimuth)
-	Y := math.Round(float64(distance) * cosEl * cosAzimuth)
-	Z := math.Round(float64(distance) * sinEl)
-
-	return int(X), int(Y), int(Z)
+	return paFloat
 }
 
 // returns the elevation angle in degrees
@@ -96,9 +83,9 @@ func getRawElevationAngle(productID byte, rowIndex uint8) int16 {
 
 	switch productID {
 	case 0x22:
-		elevAngle = (dictionary.VLP16ElevationAngles[rowIndex%16])
+		elevAngle = dictionary.VLP16ElevationAngles[rowIndex%16]
 	case 0x28:
-		elevAngle = (dictionary.VLP32ElevationAngles[rowIndex])
+		elevAngle = dictionary.VLP32ElevationAngles[rowIndex]
 	}
 
 	return elevAngle
