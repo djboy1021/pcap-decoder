@@ -116,19 +116,18 @@ func (lp *LidarPacket) SetPointCloud(nextPacketAzimuth uint16, ci *ChannelInfo) 
 
 // GetXYZ returns the XYZ Coordinates
 func (p SphericalPoint) GetXYZ() (int, int, int) {
-	azimuth := p.Azimuth()
-
-	elevAngle := p.ElevationAngle()
+	azimuth := rad(p.Azimuth())
+	elevAngle := rad(p.ElevationAngle())
 
 	cosEl := math.Cos(elevAngle)
 	sinEl := math.Sin(elevAngle)
 	sinAzimuth := math.Sin(azimuth)
 	cosAzimuth := math.Cos(azimuth)
 
-	distance := p.Distance()
-	X := math.Round(float64(distance) * cosEl * sinAzimuth)
-	Y := math.Round(float64(distance) * cosEl * cosAzimuth)
-	Z := math.Round(float64(distance) * sinEl)
+	distance := float64(p.Distance())
+	X := math.Round(distance * cosEl * sinAzimuth)
+	Y := math.Round(distance * cosEl * cosAzimuth)
+	Z := math.Round(distance * sinEl)
 
 	return int(X), int(Y), int(Z)
 }
@@ -141,8 +140,16 @@ func (p SphericalPoint) Distance() uint32 {
 
 // ElevationAngle returns the elevation angle in radians
 func (p SphericalPoint) ElevationAngle() float64 {
-	elevAngle := getElevationAngle(p.ProductID, p.LaserID)
-	return rad(elevAngle)
+	var elevAngle float64
+
+	switch p.ProductID {
+	case 0x22:
+		elevAngle = float64(dictionary.VLP16ElevationAngles[p.LaserID%16]) / 1000
+	case 0x28:
+		elevAngle = float64(dictionary.VLP32ElevationAngles[p.LaserID]) / 1000
+	}
+
+	return elevAngle
 }
 
 // Azimuth returns the azimuth angle in radians
@@ -152,6 +159,5 @@ func (p SphericalPoint) Azimuth() float64 {
 		azimuthOffset = float64(dictionary.VLP32AzimuthOffset[p.LaserID]) / 1000
 	}
 	adjustedAzimuth := azimuthOffset + float64(p.azimuth)/100
-
-	return rad(adjustedAzimuth)
+	return adjustedAzimuth
 }
