@@ -1,6 +1,7 @@
 package pcapparser
 
 import (
+	"fmt"
 	"pcap-decoder/cli"
 	"pcap-decoder/lib"
 
@@ -83,12 +84,12 @@ func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, addresses *[
 
 		if len(ipadd.Buffer) > 0 {
 
-			// fmt.Println("New Frame", ipadd.FrameIndex, len(ipadd.Buffer), len(ipadd.CurrentFrame))
+			fmt.Println("New Frame", ipadd.FrameIndex, len(ipadd.Buffer), len(ipadd.CurrentFrame))
 			// fmt.Println(ipadd.CurrentFrame[0])
 			// fmt.Println(ipadd.CurrentFrame[0].GetXYZ())
 			ipadd.CurrentFrame = ipadd.Buffer
 			ipadd.Buffer = nil
-			panic("End")
+			// panic("End")
 		}
 
 		// fmt.Println(nextPacket.TimeStamp, ipadd.CurrentPacket.TimeStamp)

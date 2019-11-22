@@ -39,20 +39,14 @@ type LidarChannel struct {
 	Reflectivity uint8  `json:"reflectivity"`
 }
 
-/*
-SphericalPoint contains the point information in spherical system.
-Distance is raw
-Azimuth is 100x in degrees
-Bearing is 1000x in degrees
-Intensity is raw
-*/
+// SphericalPoint contains the point information in spherical system.
 type SphericalPoint struct {
-	LaserID   uint8
-	ProductID byte
-	distance  uint16
-	azimuth   uint16
-	Bearing   int16
-	Intensity byte
+	LaserID     uint8
+	ProductID   byte
+	distance    uint16
+	azimuth     uint16
+	nextAzimuth uint16
+	Intensity   byte
 }
 
 // NewLidarPacket creates a new LidarPacket Object
@@ -78,7 +72,7 @@ func NewLidarPacket(data *[]byte) (LidarPacket, error) {
 
 // SetPointCloud sets the point cloud of a ChannelInfo
 func (lp *LidarPacket) SetPointCloud(nextPacketAzimuth uint16, ci *ChannelInfo) {
-	prevAzimuth := ci.InitialAzimuth
+	// prevAzimuth := uint16(360)
 
 	for colIndex := uint8(0); colIndex < 12; colIndex++ {
 		currAzimuth := lp.Blocks[colIndex].Azimuth
@@ -90,25 +84,36 @@ func (lp *LidarPacket) SetPointCloud(nextPacketAzimuth uint16, ci *ChannelInfo) 
 			}
 
 			point := SphericalPoint{
-				LaserID:   rowIndex,
-				ProductID: lp.ProductID,
-				Intensity: lp.Blocks[colIndex].Channels[rowIndex].Reflectivity,
-				distance:  distance,
-				azimuth:   currAzimuth,
-				Bearing:   getRawElevationAngle(lp.ProductID, rowIndex)}
+				LaserID:     rowIndex,
+				ProductID:   lp.ProductID,
+				Intensity:   lp.Blocks[colIndex].Channels[rowIndex].Reflectivity,
+				distance:    distance,
+				azimuth:     currAzimuth,
+				nextAzimuth: nextPacketAzimuth}
 
-			prevAzimuthUint := point.azimuth * 100
-			if ci.InitialAzimuth <= prevAzimuthUint && ci.InitialAzimuth > prevAzimuth {
-				// New Frame
-				ci.FrameIndex++
-				ci.Buffer = append(ci.Buffer, point)
-			} else {
-				ci.CurrentFrame = append(ci.CurrentFrame, point)
-			}
-			fmt.Println(point.Distance(), point.ElevationAngle(), point.Azimuth())
+			// currPointAz := uint16(point.Azimuth() * 100)
+			// fmt.Println(currPointAz, prevAzimuth, currAzimuth)
+			// C := (currPointAz - ci.InitialAzimuth) % 360
+			// P := (prevAzimuth - ci.InitialAzimuth) % 360
+			// Check for new frame
+			// if P > C+100 {
+			// 	// fmt.Println(C, P, ci.FrameIndex, currPointAz, ci.InitialAzimuth, prevAzimuth)
+
+			// 	ci.Buffer = append(ci.Buffer, point)
+			// 	ci.FrameIndex++
+			// } else {
+			ci.CurrentFrame = append(ci.CurrentFrame, point)
+			// }
+
+			// fmt.Println(point.Distance(), point.ElevationAngle(), point.Azimuth())
 			fmt.Println(point.GetXYZ())
+			// fmt.Println(" ", point.Azimuth())
 
-			prevAzimuth = prevAzimuthUint
+			if len(ci.CurrentFrame) > 10 {
+				panic("err")
+			}
+
+			// prevAzimuth = currPointAz
 		}
 	}
 
@@ -116,8 +121,14 @@ func (lp *LidarPacket) SetPointCloud(nextPacketAzimuth uint16, ci *ChannelInfo) 
 
 // GetXYZ returns the XYZ Coordinates
 func (p SphericalPoint) GetXYZ() (int, int, int) {
-	azimuth := rad(p.Azimuth())
-	elevAngle := rad(p.ElevationAngle())
+	var azimuthOffset float64
+	if p.ProductID == 0x28 {
+		azimuthOffset = float64(dictionary.VLP32AzimuthOffset[p.LaserID]) / 1000
+	}
+
+	azimuth := rad(p.Azimuth() + azimuthOffset)
+	fmt.Println(p.Azimuth() + azimuthOffset)
+	elevAngle := rad(p.Bearing())
 
 	cosEl := math.Cos(elevAngle)
 	sinEl := math.Sin(elevAngle)
@@ -138,8 +149,8 @@ func (p SphericalPoint) Distance() uint32 {
 	return d << 1
 }
 
-// ElevationAngle returns the elevation angle in radians
-func (p SphericalPoint) ElevationAngle() float64 {
+// Bearing returns the elevation angle in radians
+func (p SphericalPoint) Bearing() float64 {
 	var elevAngle float64
 
 	switch p.ProductID {
@@ -154,10 +165,8 @@ func (p SphericalPoint) ElevationAngle() float64 {
 
 // Azimuth returns the azimuth angle in radians
 func (p SphericalPoint) Azimuth() float64 {
-	var azimuthOffset float64
-	if p.ProductID == 0x28 {
-		azimuthOffset = float64(dictionary.VLP32AzimuthOffset[p.LaserID]) / 1000
-	}
-	adjustedAzimuth := azimuthOffset + float64(p.azimuth)/100
-	return adjustedAzimuth
+	pAzimuth := float64(getPrecisionAzimuth(p.azimuth, p.nextAzimuth, p.LaserID, p.ProductID))
+	fmt.Println(pAzimuth, p.azimuth, p.nextAzimuth, p.LaserID, p.ProductID)
+
+	return pAzimuth
 }
