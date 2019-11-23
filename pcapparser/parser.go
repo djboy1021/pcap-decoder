@@ -14,8 +14,8 @@ type ChannelInfo struct {
 	FrameIndex     uint
 	InitialAzimuth uint16
 	CurrentPacket  LidarPacket
-	CurrentFrame   []SphericalPoint
-	Buffer         []SphericalPoint
+	CurrentFrame   []LidarPoint
+	Buffer         []LidarPoint
 }
 
 // ParsePCAP creates several go routines to start decoding the PCAP file.
@@ -74,27 +74,27 @@ func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, addresses *[
 
 	// Simplify the address of the current IP Address
 	// Subtract 1 to the indexLookup value to correct the actual number
-	ipadd := &((*addresses)[indexLookup[ipAddress]-1])
+	channel := &((*addresses)[indexLookup[ipAddress]-1])
 
 	// Wait for nonempty timestamp
-	if ipadd.CurrentPacket.TimeStamp > 0 {
-		ipadd.CurrentPacket.SetPointCloud(
+	if channel.CurrentPacket.TimeStamp > 0 {
+		channel.CurrentPacket.SetPointCloud(
 			nextPacket.Blocks[0].Azimuth,
-			ipadd)
+			channel)
 
-		if len(ipadd.Buffer) > 0 {
+		if len(channel.Buffer) > 0 {
 
-			fmt.Println("New Frame", ipadd.FrameIndex, len(ipadd.Buffer), len(ipadd.CurrentFrame))
-			// fmt.Println(ipadd.CurrentFrame[0])
-			// fmt.Println(ipadd.CurrentFrame[0].GetXYZ())
-			ipadd.CurrentFrame = ipadd.Buffer
-			ipadd.Buffer = nil
+			fmt.Println("New Frame", channel.FrameIndex, len(channel.Buffer), len(channel.CurrentFrame))
+			// fmt.Println(channel.CurrentFrame[0])
+			// fmt.Println(channel.CurrentFrame[0].GetXYZ())
+			channel.CurrentFrame = channel.Buffer
+			channel.Buffer = nil
 			// panic("End")
 		}
 
-		// fmt.Println(nextPacket.TimeStamp, ipadd.CurrentPacket.TimeStamp)
+		// fmt.Println(nextPacket.TimeStamp, channel.CurrentPacket.TimeStamp)
 	}
 
 	// Update current packet
-	ipadd.CurrentPacket = nextPacket
+	channel.CurrentPacket = nextPacket
 }
