@@ -9,8 +9,8 @@ import (
 	"github.com/google/gopacket/pcap"
 )
 
-// ChannelInfo contains the iteration info of an IP address
-type ChannelInfo struct {
+// LidarSource contains the iteration info of an IP address
+type LidarSource struct {
 	FrameIndex     uint
 	InitialAzimuth uint16
 	CurrentPacket  LidarPacket
@@ -25,7 +25,7 @@ func ParsePCAP() {
 	check(err)
 
 	indexLookup := make(map[string]uint8, 0)
-	addresses := make([]ChannelInfo, 0)
+	addresses := make([]LidarSource, 0)
 
 PACKETS:
 	for packet := range packets {
@@ -53,7 +53,7 @@ func getPackets() (chan gopacket.Packet, error) {
 	return gopacket.NewPacketSource(handle, handle.LinkType()).Packets(), err
 }
 
-func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, addresses *[]ChannelInfo, nextPacketData *[]byte) {
+func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, addresses *[]LidarSource, nextPacketData *[]byte) {
 	ipAddress := lib.GetIPv4((*p).String())
 
 	// Parse packet in advance
@@ -66,7 +66,7 @@ func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, addresses *[
 			initialAzimuth = 360
 		}
 
-		*addresses = append(*addresses, ChannelInfo{
+		*addresses = append(*addresses, LidarSource{
 			FrameIndex:     0,
 			InitialAzimuth: initialAzimuth})
 		indexLookup[ipAddress] = uint8(len(*addresses))

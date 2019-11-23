@@ -58,8 +58,8 @@ func NewLidarPacket(data *[]byte) (LidarPacket, error) {
 	return lp, err
 }
 
-// SetPointCloud sets the point cloud of a ChannelInfo
-func (lp *LidarPacket) SetPointCloud(nextPacketAzimuth uint16, ci *ChannelInfo) {
+// SetPointCloud sets the point cloud of a LidarSource
+func (lp *LidarPacket) SetPointCloud(nextPacketAzimuth uint16, ci *LidarSource) {
 
 	for colIndex := uint8(0); colIndex < 12; colIndex++ {
 		currAzimuth := lp.Blocks[colIndex].Azimuth
