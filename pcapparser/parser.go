@@ -75,10 +75,10 @@ func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, lidarSources
 
 		if len(lidarSource.Buffer) > 0 {
 
-			fmt.Println("New Frame", lidarSource.FrameIndex, len(lidarSource.Buffer), len(lidarSource.CurrentFrame))
+			fmt.Println("New Frame", lidarSource.FrameIndex, len(lidarSource.Buffer), len(lidarSource.CurrenPoints))
 			// fmt.Println(lidarSource.CurrentFrame[0])
 			// fmt.Println(lidarSource.CurrentFrame[0].GetXYZ())
-			lidarSource.CurrentFrame = lidarSource.Buffer
+			lidarSource.CurrenPoints = lidarSource.Buffer
 			lidarSource.Buffer = nil
 			// panic("End")
 		}

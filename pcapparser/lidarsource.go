@@ -8,7 +8,7 @@ type LidarSource struct {
 	InitialAzimuth    uint16
 	nextPacketAzimuth uint16
 	CurrentPacket     LidarPacket
-	CurrentFrame      []LidarPoint
+	CurrenPoints      []LidarPoint
 	Buffer            []LidarPoint
 }
 
@@ -49,7 +49,7 @@ func (ls *LidarSource) SetCurrentFrame() {
 			// 	ls.Buffer = append(ls.Buffer, point)
 			// 	ls.FrameIndex++
 			// } else {
-			ls.CurrentFrame = append(ls.CurrentFrame, point)
+			ls.CurrenPoints = append(ls.CurrenPoints, point)
 			// }
 
 			// fmt.Println(point.Distance(), point.ElevationAngle(), point.Azimuth())
@@ -57,7 +57,7 @@ func (ls *LidarSource) SetCurrentFrame() {
 			fmt.Println(point.LaserID, point.Distance(), point.Azimuth(), point.Bearing(), x, y, z)
 			// fmt.Println(" ", point.Azimuth())
 
-			if len(ls.CurrentFrame) > 32 {
+			if len(ls.CurrenPoints) > 32 {
 				panic("err")
 			}
 
