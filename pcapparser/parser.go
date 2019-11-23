@@ -16,7 +16,7 @@ func ParsePCAP() {
 	check(err)
 
 	indexLookup := make(map[string]uint8, 0)
-	addresses := make([]LidarSource, 0)
+	lidarSources := make([]LidarSource, 0)
 
 PACKETS:
 	for packet := range packets {
@@ -25,7 +25,7 @@ PACKETS:
 		switch len(nextPacketData) {
 		case 1248:
 
-			decodePacket(&packet, indexLookup, &addresses, &nextPacketData)
+			decodePacket(&packet, indexLookup, &lidarSources, &nextPacketData)
 
 		case 554:
 			// fmt.Println("GPRMC packet")
@@ -33,7 +33,7 @@ PACKETS:
 			continue PACKETS
 		}
 
-		// if len(addresses) > 2 {
+		// if len(lidarSources) > 2 {
 		// 	break
 		// }
 	}
@@ -44,7 +44,7 @@ func getPackets() (chan gopacket.Packet, error) {
 	return gopacket.NewPacketSource(handle, handle.LinkType()).Packets(), err
 }
 
-func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, addresses *[]LidarSource, nextPacketData *[]byte) {
+func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, lidarSources *[]LidarSource, nextPacketData *[]byte) {
 	ipAddress := lib.GetIPv4((*p).String())
 
 	// Parse packet in advance
@@ -57,15 +57,15 @@ func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, addresses *[
 			initialAzimuth = 360
 		}
 
-		*addresses = append(*addresses, LidarSource{
+		*lidarSources = append(*lidarSources, LidarSource{
 			FrameIndex:     0,
 			InitialAzimuth: initialAzimuth})
-		indexLookup[ipAddress] = uint8(len(*addresses))
+		indexLookup[ipAddress] = uint8(len(*lidarSources))
 	}
 
 	// Simplify the address of the current IP Address
 	// Subtract 1 to the indexLookup value to correct the actual number
-	lidarSource := &((*addresses)[indexLookup[ipAddress]-1])
+	lidarSource := &((*lidarSources)[indexLookup[ipAddress]-1])
 
 	// Wait for nonempty timestamp
 	if lidarSource.CurrentPacket.TimeStamp > 0 {
