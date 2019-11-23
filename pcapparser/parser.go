@@ -9,15 +9,6 @@ import (
 	"github.com/google/gopacket/pcap"
 )
 
-// LidarSource contains the iteration info of an IP address
-type LidarSource struct {
-	FrameIndex     uint
-	InitialAzimuth uint16
-	CurrentPacket  LidarPacket
-	CurrentFrame   []LidarPoint
-	Buffer         []LidarPoint
-}
-
 // ParsePCAP creates several go routines to start decoding the PCAP file.
 func ParsePCAP() {
 	// get packets
@@ -74,27 +65,27 @@ func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, addresses *[
 
 	// Simplify the address of the current IP Address
 	// Subtract 1 to the indexLookup value to correct the actual number
-	channel := &((*addresses)[indexLookup[ipAddress]-1])
+	lidarSource := &((*addresses)[indexLookup[ipAddress]-1])
 
 	// Wait for nonempty timestamp
-	if channel.CurrentPacket.TimeStamp > 0 {
-		channel.CurrentPacket.SetPointCloud(
+	if lidarSource.CurrentPacket.TimeStamp > 0 {
+		lidarSource.CurrentPacket.SetPointCloud(
 			nextPacket.Blocks[0].Azimuth,
-			channel)
+			lidarSource)
 
-		if len(channel.Buffer) > 0 {
+		if len(lidarSource.Buffer) > 0 {
 
-			fmt.Println("New Frame", channel.FrameIndex, len(channel.Buffer), len(channel.CurrentFrame))
-			// fmt.Println(channel.CurrentFrame[0])
-			// fmt.Println(channel.CurrentFrame[0].GetXYZ())
-			channel.CurrentFrame = channel.Buffer
-			channel.Buffer = nil
+			fmt.Println("New Frame", lidarSource.FrameIndex, len(lidarSource.Buffer), len(lidarSource.CurrentFrame))
+			// fmt.Println(lidarSource.CurrentFrame[0])
+			// fmt.Println(lidarSource.CurrentFrame[0].GetXYZ())
+			lidarSource.CurrentFrame = lidarSource.Buffer
+			lidarSource.Buffer = nil
 			// panic("End")
 		}
 
-		// fmt.Println(nextPacket.TimeStamp, channel.CurrentPacket.TimeStamp)
+		// fmt.Println(nextPacket.TimeStamp, lidarSource.CurrentPacket.TimeStamp)
 	}
 
 	// Update current packet
-	channel.CurrentPacket = nextPacket
+	lidarSource.CurrentPacket = nextPacket
 }
