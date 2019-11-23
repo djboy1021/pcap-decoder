@@ -139,24 +139,3 @@ func getRawElevationAngle(productID byte, rowIndex uint8) int16 {
 func rad(degrees float64) float64 {
 	return degrees * math.Pi / 180
 }
-
-func getXYZCoordinates(distance *uint32, azimuth uint16, productID byte, rowIndex uint8) (int, int, int) {
-	var azimuthOffset float64
-
-	if productID == 0x28 {
-		azimuthOffset = float64(dictionary.VLP32AzimuthOffset[rowIndex]) / 1000
-	}
-
-	elevAngle := getElevationAngle(productID, rowIndex)
-
-	cosEl := math.Cos(rad((elevAngle)))
-	sinEl := math.Sin(rad((elevAngle)))
-	sinAzimuth := math.Sin(rad((azimuthOffset) + float64(azimuth)/100))
-	cosAzimuth := math.Cos(rad((azimuthOffset) + float64(azimuth)/100))
-
-	X := math.Round(float64(*distance) * cosEl * sinAzimuth)
-	Y := math.Round(float64(*distance) * cosEl * cosAzimuth)
-	Z := math.Round(float64(*distance) * sinEl)
-
-	return int(X), int(Y), int(Z)
-}
