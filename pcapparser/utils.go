@@ -2,7 +2,6 @@ package pcapparser
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
 	"pcap-decoder/dictionary"
 )
@@ -23,38 +22,6 @@ func getProductID(packetData *[]byte) byte {
 
 func getTime(packetData *[]byte) uint32 {
 	return binary.LittleEndian.Uint32((*packetData)[1242:1246])
-}
-
-func getAngleTimeOffset(productID byte, rowIndex uint8, azimuthGap uint16) uint16 {
-	var K float64
-	var angleTimeOffset float64
-	switch productID {
-	case 0x28:
-		if rowIndex%2 == 0 {
-			K = float64(rowIndex)
-		} else {
-			K = float64(rowIndex - 1)
-		}
-		K /= 2
-		angleTimeOffset = float64(azimuthGap) * K * 2304 / 55296 // 2.304/55.296 = 0.0416667
-
-	case 0x22:
-		var time float64
-		var totalTime float64
-		if rowIndex < 16 {
-			time = 2304 * float64(rowIndex)
-			totalTime = 55296
-		} else {
-			time = 55296 + 2304*float64(rowIndex-16)
-			totalTime = 110592
-		}
-		angleTimeOffset = float64(azimuthGap) * time / totalTime
-
-	default:
-		panic(fmt.Sprintf("product ID 0x%x is not supported", productID))
-	}
-
-	return uint16(math.Round(angleTimeOffset))
 }
 
 func getAzimuthGap(currAzimuth uint16, nextAzimuth uint16) uint16 {
