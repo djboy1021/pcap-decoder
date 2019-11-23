@@ -63,12 +63,12 @@ func (p LidarPoint) Azimuth() float64 {
 
 	azimuthGap := getAzimuthGap(p.azimuth, p.nextAzimuth)
 	angleTimeOffset := getAngleTimeOffset(p.productID, p.LaserID, azimuthGap)
-	precisionAzimuth := p.azimuth + angleTimeOffset
+	precisionAzimuth := (float64(p.azimuth) + angleTimeOffset) / 100
 
-	return float64(precisionAzimuth)/100 + azimuthOffset
+	return precisionAzimuth + azimuthOffset
 }
 
-func getAngleTimeOffset(productID byte, rowIndex uint8, azimuthGap uint16) uint16 {
+func getAngleTimeOffset(productID byte, rowIndex uint8, azimuthGap uint16) float64 {
 	var K float64
 	var angleTimeOffset float64
 	switch productID {
@@ -78,8 +78,10 @@ func getAngleTimeOffset(productID byte, rowIndex uint8, azimuthGap uint16) uint1
 		} else {
 			K = float64(rowIndex - 1)
 		}
-		K /= 2
-		angleTimeOffset = float64(azimuthGap) * K * 2304 / 55296 // 2.304/55.296 = 0.0416667
+		// K /= 2
+		// angleTimeOffset = float64(azimuthGap) * K  / 24 // 2.304/55.296 = 1/24
+
+		angleTimeOffset = float64(azimuthGap) * K / 48 // K/2/24 = K /48
 
 	case 0x22:
 		var time float64
@@ -97,5 +99,5 @@ func getAngleTimeOffset(productID byte, rowIndex uint8, azimuthGap uint16) uint1
 		panic(fmt.Sprintf("product ID 0x%x is not supported", productID))
 	}
 
-	return uint16(math.Round(angleTimeOffset))
+	return angleTimeOffset
 }
