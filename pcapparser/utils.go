@@ -64,50 +64,6 @@ func getAzimuthGap(currAzimuth uint16, nextAzimuth uint16) uint16 {
 	return nextAzimuth - currAzimuth
 }
 
-func getPrecisionAzimuth(currAzimuth uint16, nextAzimuth uint16, rowIndex uint8, productID byte) float32 {
-	var azimuthGap uint16
-
-	if nextAzimuth < currAzimuth {
-		azimuthGap = (36000 - currAzimuth) + nextAzimuth // same as nextAzimuth + 36000 - currAzimuth
-	} else {
-		azimuthGap = nextAzimuth - currAzimuth
-	}
-
-	var precisionAzimuth uint16
-
-	switch productID {
-	case 0x28:
-		angleTimeOffset := getAngleTimeOffset(productID, rowIndex, azimuthGap)
-		fmt.Println("calcOffset", angleTimeOffset, rowIndex, currAzimuth, nextAzimuth)
-		precisionAzimuth = currAzimuth + angleTimeOffset
-	case 0x22:
-		K := float64(rowIndex)
-		if rowIndex < 16 {
-			// Precision_Azimuth[K] := Azimuth[datablock_n] + (AzimuthGap * 2.304 μs * K) / 55.296 μs);
-			precisionAzimuth = currAzimuth + uint16(math.Round(float64(azimuthGap)*K*0.04166667)) // 2.304/55.296 = 0.0416667
-		} else {
-			// Precision_Azimuth[K] := Azimuth[datablock_n] + (AzimuthGap * 2.304 μs * ((K-16) + 55.296 μs)) / (2 * 55.296 μs);
-			precisionAzimuth = currAzimuth + uint16((float64(azimuthGap)*(float64(K-16)+55.296))*0.02083333) // 2.304/(2*55.296) = 0.02083333
-		}
-	default:
-		panic(string(productID) + "is not supported")
-	}
-
-	// var paFloat float32
-	// if productID == 0x28 {
-	// 	paFloat = float32(precisionAzimuth)/100 + float32(dictionary.VLP32AzimuthOffset[rowIndex])/1000
-	// }
-
-	paFloat := float32(precisionAzimuth)
-	// fmt.Println("asdfsd", dictionary.VLP32AzimuthOffset[rowIndex], currAzimuth, nextAzimuth)
-
-	// if paFloat > 360 {
-	// 	paFloat -= 360
-	// }
-
-	return paFloat
-}
-
 // returns the elevation angle in degrees
 func getElevationAngle(productID byte, rowIndex uint8) float64 {
 	var elevAngle float64
