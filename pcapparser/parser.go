@@ -69,9 +69,9 @@ func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, lidarSources
 
 	// Wait for nonempty timestamp
 	if lidarSource.CurrentPacket.TimeStamp > 0 {
-		lidarSource.CurrentPacket.SetPointCloud(
-			nextPacket.Blocks[0].Azimuth,
-			lidarSource)
+		// Set next packet's azimuth
+		lidarSource.nextPacketAzimuth = nextPacket.Blocks[0].Azimuth
+		lidarSource.SetCurrentFrame()
 
 		if len(lidarSource.Buffer) > 0 {
 
