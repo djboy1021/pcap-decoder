@@ -77,8 +77,15 @@ func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, lidarSources
 			fmt.Println("New Frame", ipAddress, lidarSource.FrameIndex, len(lidarSource.CurrentFrame.Points), len(lidarSource.Buffer))
 
 			lidarSource.CurrentFrame.XYZ(
-				Rotation{},
-				Translation{})
+				RotationAngles{},
+				Translation{x: 50, y: 20})
+
+			unit := float64(20)
+			xyzRange := [3][2]float64{{-10000, 10000}, {-10000, 10000}, {-5000, 5000}}
+
+			lidarSource.LocalizeFrame(&xyzRange, unit)
+
+			panic("Temp")
 
 			lidarSource.CurrentFrame.Points = lidarSource.Buffer
 			lidarSource.Buffer = nil

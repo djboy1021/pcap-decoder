@@ -1,5 +1,13 @@
 package pcapparser
 
+import (
+	"fmt"
+	"image"
+	"image/color"
+	"image/png"
+	"os"
+)
+
 // LidarSource contains the iteration info of an IP address
 type LidarSource struct {
 	FrameIndex        uint
@@ -56,4 +64,34 @@ func getNextAzimuth(colIndex uint8, ls *LidarSource) uint16 {
 		nextAzimuth = ls.nextPacketAzimuth
 	}
 	return nextAzimuth
+}
+
+// LocalizeFrame creates an array of all XYZ points with granularity
+func (ls *LidarSource) LocalizeFrame(limits *[3][2]float64, unit float64) {
+	Xr := limits[0]
+	Yr := limits[1]
+	Zr := limits[2]
+
+	filename := "./test.png"
+
+	m := image.NewGray16(image.Rect(int(Xr[0]/unit), int(Yr[0]/unit), int(Xr[1]/unit), int(Yr[1]/unit)))
+	for _, point := range ls.CurrentFrame.Points {
+		cp := point.GetXYZ()
+		isWithinX := cp.X >= Xr[0] && cp.X < Xr[1]
+		isWithinY := cp.Y >= Yr[0] && cp.Y < Yr[1]
+		isWithinZ := cp.Z >= Zr[0] && cp.Z < Zr[1]
+
+		if isWithinX && isWithinY && isWithinZ {
+			colorIntensity := 0xFFFF * (cp.Z - Zr[0]) / (Zr[1] - Zr[0])
+			m.Set(int(cp.X/unit), int(cp.Y/unit), color.Gray16{uint16(colorIntensity)})
+		}
+	}
+
+	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer f.Close()
+	png.Encode(f, m)
 }
