@@ -22,7 +22,7 @@ type LidarPacket struct {
 	TimeStamp  uint32       `json:"timestamp"`
 	ProductID  byte         `json:"productID"`
 	IsDualMode bool         `json:"isDualMode"`
-	Blocks     []LidarBlock `json:"blocks"`
+	blocks     []LidarBlock `json:"blocks"`
 }
 
 // LidarBlock contains the channels data
@@ -50,12 +50,10 @@ func NewLidarPacket(data *[]byte) (LidarPacket, error) {
 			IsDualMode: isDualMode(data),
 			ProductID:  getProductID(data),
 			TimeStamp:  getTime(data),
-			Blocks:     blocks}
+			blocks:     blocks}
 	} else {
 		err = fmt.Errorf("not a lidar packet")
 	}
 
 	return lp, err
 }
-
-

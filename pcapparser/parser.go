@@ -52,7 +52,7 @@ func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, lidarSources
 	check(err)
 
 	if indexLookup[ipAddress] == 0 {
-		initialAzimuth := nextPacket.Blocks[0].Azimuth
+		initialAzimuth := nextPacket.blocks[0].Azimuth
 		if initialAzimuth == 0 {
 			initialAzimuth = 360
 		}
@@ -70,11 +70,11 @@ func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, lidarSources
 	// Wait for nonempty timestamp
 	if lidarSource.CurrentPacket.TimeStamp > 0 {
 		// Set next packet's azimuth
-		lidarSource.nextPacketAzimuth = nextPacket.Blocks[0].Azimuth
+		lidarSource.nextPacketAzimuth = nextPacket.blocks[0].Azimuth
 		lidarSource.SetCurrentFrame()
 
 		if len(lidarSource.Buffer) > 0 {
-			fmt.Println("New Frame", lidarSource.FrameIndex, len(lidarSource.CurrenPoints), len(lidarSource.Buffer))
+			go fmt.Println("New Frame", ipAddress, lidarSource.FrameIndex, len(lidarSource.CurrenPoints), len(lidarSource.Buffer))
 			lidarSource.CurrenPoints = lidarSource.Buffer
 			lidarSource.Buffer = nil
 

@@ -12,60 +12,48 @@ type LidarSource struct {
 
 // SetCurrentFrame sets the point cloud of a LidarSource
 func (ls *LidarSource) SetCurrentFrame() {
-	prevAzimuth := ls.InitialAzimuth
-
 	for colIndex := uint8(0); colIndex < 12; colIndex++ {
-		currAzimuth := ls.CurrentPacket.Blocks[colIndex].Azimuth
-		var nextAzimuth uint16
-		if colIndex < 10 {
-			nextAzimuth = ls.CurrentPacket.Blocks[colIndex+1].Azimuth
-		} else {
-			nextAzimuth = ls.nextPacketAzimuth
-		}
+		currAzimuth := ls.CurrentPacket.blocks[colIndex].Azimuth
+		nextAzimuth := getNextAzimuth(colIndex, ls)
 
-		isNewFrame := isNewFrame(prevAzimuth, currAzimuth, nextAzimuth, ls)
+		isNewFrame := isNewFrame(currAzimuth, nextAzimuth, ls)
 
 		for rowIndex := uint8(0); rowIndex < 32; rowIndex++ {
-			distance := ls.CurrentPacket.Blocks[colIndex].Channels[rowIndex].Distance
-			if distance == 0 {
-				continue
+			distance := ls.CurrentPacket.blocks[colIndex].Channels[rowIndex].Distance
+			if distance > 0 {
+				point := LidarPoint{
+					rowIndex:    rowIndex,
+					productID:   ls.CurrentPacket.ProductID,
+					Intensity:   ls.CurrentPacket.blocks[colIndex].Channels[rowIndex].Reflectivity,
+					distance:    distance,
+					azimuth:     currAzimuth,
+					nextAzimuth: nextAzimuth}
+
+				if isNewFrame {
+					ls.Buffer = append(ls.Buffer, point)
+				} else {
+					ls.CurrenPoints = append(ls.CurrenPoints, point)
+				}
 			}
-
-			point := LidarPoint{
-				rowIndex:    rowIndex,
-				productID:   ls.CurrentPacket.ProductID,
-				Intensity:   ls.CurrentPacket.Blocks[colIndex].Channels[rowIndex].Reflectivity,
-				distance:    distance,
-				azimuth:     currAzimuth,
-				nextAzimuth: nextAzimuth}
-
-			// precisionAzimuth := point.Azimuth()
-
-			if isNewFrame {
-				ls.Buffer = append(ls.Buffer, point)
-			} else {
-				ls.CurrenPoints = append(ls.CurrenPoints, point)
-			}
-
 		}
-
-		prevAzimuth = currAzimuth
 	}
-
 }
 
-func isNewFrame(prevAzimuth uint16, currAzimuth uint16, nextAzimuth uint16, ls *LidarSource) bool {
+func isNewFrame(currAzimuth uint16, nextAzimuth uint16, ls *LidarSource) bool {
 	offset := int(36000 - ls.InitialAzimuth)
 
-	// pPrevAzimuth := (int(prevAzimuth) + offset) % 36000
 	pCurrAzimuth := (int(currAzimuth) + offset) % 36000
 	pNextAzimuth := (int(nextAzimuth) + offset) % 36000
 
-	isNewFrame := pNextAzimuth < pCurrAzimuth
+	return pNextAzimuth < pCurrAzimuth
+}
 
-	// if isNewFrame {
-	// 	fmt.Println(pPrevAzimuth, pCurrAzimuth, pNextAzimuth)
-	// }
-
-	return isNewFrame
+func getNextAzimuth(colIndex uint8, ls *LidarSource) uint16 {
+	var nextAzimuth uint16
+	if colIndex < 10 {
+		nextAzimuth = ls.CurrentPacket.blocks[colIndex+1].Azimuth
+	} else {
+		nextAzimuth = ls.nextPacketAzimuth
+	}
+	return nextAzimuth
 }
