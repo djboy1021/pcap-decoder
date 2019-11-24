@@ -72,7 +72,7 @@ func (ls *LidarSource) LocalizeFrame(limits *[3][2]float64, unit float64) {
 	Yr := limits[1]
 	Zr := limits[2]
 
-	filename := "./test.png"
+	filename := fmt.Sprintf("./frame%d.png", ls.FrameIndex)
 
 	m := image.NewGray16(image.Rect(int(Xr[0]/unit), int(Yr[0]/unit), int(Xr[1]/unit), int(Yr[1]/unit)))
 	for _, point := range ls.CurrentFrame.Points {
