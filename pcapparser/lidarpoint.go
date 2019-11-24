@@ -8,7 +8,7 @@ import (
 
 // LidarPoint contains the point information in spherical system.
 type LidarPoint struct {
-	LaserID     uint8
+	rowIndex    uint8
 	productID   byte
 	distance    uint16
 	azimuth     uint16
@@ -45,9 +45,9 @@ func (p LidarPoint) Bearing() float64 {
 
 	switch p.productID {
 	case 0x22:
-		elevAngle = float64(dictionary.VLP16ElevationAngles[p.LaserID%16]) / 1000
+		elevAngle = float64(dictionary.VLP16ElevationAngles[p.rowIndex%16]) / 1000
 	case 0x28:
-		elevAngle = float64(dictionary.VLP32ElevationAngles[p.LaserID]) / 1000
+		elevAngle = float64(dictionary.VLP32ElevationAngles[p.rowIndex]) / 1000
 	}
 
 	return elevAngle
@@ -58,11 +58,11 @@ func (p LidarPoint) Azimuth() float64 {
 	var azimuthOffset float64
 
 	if p.productID == 0x28 {
-		azimuthOffset = float64(dictionary.VLP32AzimuthOffset[p.LaserID]) / 1000
+		azimuthOffset = float64(dictionary.VLP32AzimuthOffset[p.rowIndex]) / 1000
 	}
 
 	azimuthGap := getAzimuthGap(p.azimuth, p.nextAzimuth)
-	angleTimeOffset := getAngleTimeOffset(p.productID, p.LaserID, azimuthGap)
+	angleTimeOffset := getAngleTimeOffset(p.productID, p.rowIndex, azimuthGap)
 	precisionAzimuth := (float64(p.azimuth)+angleTimeOffset)/100 + azimuthOffset
 
 	if precisionAzimuth > 360 {

@@ -12,7 +12,7 @@ type LidarSource struct {
 
 // SetCurrentFrame sets the point cloud of a LidarSource
 func (ls *LidarSource) SetCurrentFrame() {
-	var prevAzimuth float64
+	prevAzimuth := float64(ls.InitialAzimuth)
 
 	for colIndex := uint8(0); colIndex < 12; colIndex++ {
 		currAzimuth := ls.CurrentPacket.Blocks[colIndex].Azimuth
@@ -30,7 +30,7 @@ func (ls *LidarSource) SetCurrentFrame() {
 			}
 
 			point := LidarPoint{
-				LaserID:     rowIndex,
+				rowIndex:    rowIndex,
 				productID:   ls.CurrentPacket.ProductID,
 				Intensity:   ls.CurrentPacket.Blocks[colIndex].Channels[rowIndex].Reflectivity,
 				distance:    distance,
@@ -39,7 +39,8 @@ func (ls *LidarSource) SetCurrentFrame() {
 
 			precisionAzimuth := point.Azimuth()
 
-			isNewFrame := prevAzimuth-precisionAzimuth > 300 || len(ls.Buffer) > 0
+			isNewFrame := isNewFrame(prevAzimuth, precisionAzimuth, currAzimuth, nextAzimuth, ls)
+
 			if isNewFrame {
 				ls.Buffer = append(ls.Buffer, point)
 			} else {
@@ -50,4 +51,14 @@ func (ls *LidarSource) SetCurrentFrame() {
 		}
 	}
 
+}
+
+func isNewFrame(previous float64, current float64, currAzimuth uint16, nextAzimuth uint16, ls *LidarSource) bool {
+	// offset := int(36000 - ls.InitialAzimuth)
+
+	isNewFrame := nextAzimuth < currAzimuth
+
+	// isNewFrame := len(ls.Buffer) > 0 || pPrevious-pCurrent > 10000
+
+	return isNewFrame
 }
