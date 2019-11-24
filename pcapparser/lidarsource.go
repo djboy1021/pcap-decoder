@@ -1,7 +1,5 @@
 package pcapparser
 
-import "fmt"
-
 // LidarSource contains the iteration info of an IP address
 type LidarSource struct {
 	FrameIndex        uint
@@ -14,6 +12,7 @@ type LidarSource struct {
 
 // SetCurrentFrame sets the point cloud of a LidarSource
 func (ls *LidarSource) SetCurrentFrame() {
+	var prevAzimuth float64
 
 	for colIndex := uint8(0); colIndex < 12; colIndex++ {
 		currAzimuth := ls.CurrentPacket.Blocks[colIndex].Azimuth
@@ -38,30 +37,16 @@ func (ls *LidarSource) SetCurrentFrame() {
 				azimuth:     currAzimuth,
 				nextAzimuth: nextAzimuth}
 
-			// currPointAz := uint16(point.Azimuth() * 100)
-			// fmt.Println(currPointAz, prevAzimuth, currAzimuth)
-			// C := (currPointAz - ls.InitialAzimuth) % 360
-			// P := (prevAzimuth - ls.InitialAzimuth) % 360
-			// Check for new frame
-			// if P > C+100 {
-			// 	// fmt.Println(C, P, ls.FrameIndex, currPointAz, ls.InitialAzimuth, prevAzimuth)
+			precisionAzimuth := point.Azimuth()
 
-			// 	ls.Buffer = append(ls.Buffer, point)
-			// 	ls.FrameIndex++
-			// } else {
-			ls.CurrenPoints = append(ls.CurrenPoints, point)
-			// }
-
-			// fmt.Println(point.Distance(), point.ElevationAngle(), point.Azimuth())
-			x, y, z := point.GetXYZ()
-			fmt.Println(point.LaserID, point.Distance(), point.Azimuth(), point.Bearing(), x, y, z)
-			// fmt.Println(" ", point.Azimuth())
-
-			if len(ls.CurrenPoints) > 32 {
-				panic("err")
+			isNewFrame := prevAzimuth-precisionAzimuth > 300 || len(ls.Buffer) > 0
+			if isNewFrame {
+				ls.Buffer = append(ls.Buffer, point)
+			} else {
+				ls.CurrenPoints = append(ls.CurrenPoints, point)
 			}
 
-			// prevAzimuth = currPointAz
+			prevAzimuth = precisionAzimuth
 		}
 	}
 

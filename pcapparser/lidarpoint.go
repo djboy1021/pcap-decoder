@@ -63,9 +63,13 @@ func (p LidarPoint) Azimuth() float64 {
 
 	azimuthGap := getAzimuthGap(p.azimuth, p.nextAzimuth)
 	angleTimeOffset := getAngleTimeOffset(p.productID, p.LaserID, azimuthGap)
-	precisionAzimuth := (float64(p.azimuth) + angleTimeOffset) / 100
+	precisionAzimuth := (float64(p.azimuth)+angleTimeOffset)/100 + azimuthOffset
 
-	return precisionAzimuth + azimuthOffset
+	if precisionAzimuth > 360 {
+		precisionAzimuth -= 360
+	}
+
+	return precisionAzimuth
 }
 
 func getAngleTimeOffset(productID byte, rowIndex uint8, azimuthGap uint16) float64 {
@@ -89,6 +93,8 @@ func getAngleTimeOffset(productID byte, rowIndex uint8, azimuthGap uint16) float
 		if rowIndex < 16 {
 			time = 2304 * float64(rowIndex)
 			totalTime = 55296
+			// time = float64(rowIndex)
+			// totalTime = 24
 		} else {
 			time = 55296 + 2304*float64(rowIndex-16)
 			totalTime = 110592
