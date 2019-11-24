@@ -17,7 +17,7 @@ type LidarPoint struct {
 }
 
 // GetXYZ returns the XYZ Coordinates
-func (p LidarPoint) GetXYZ() (float64, float64, float64) {
+func (p LidarPoint) GetXYZ() CartesianPoint {
 	azimuth := rad(p.Azimuth())
 	elevAngle := rad(p.Bearing())
 
@@ -27,11 +27,11 @@ func (p LidarPoint) GetXYZ() (float64, float64, float64) {
 	cosAzimuth := math.Cos(azimuth)
 
 	distance := float64(p.Distance())
-	X := distance * cosEl * sinAzimuth
-	Y := distance * cosEl * cosAzimuth
-	Z := distance * sinEl
 
-	return X, Y, Z
+	return CartesianPoint{
+		X: distance * cosEl * sinAzimuth,
+		Y: distance * cosEl * cosAzimuth,
+		Z: distance * sinEl}
 }
 
 // Distance returns the distance in mm

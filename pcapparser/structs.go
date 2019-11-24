@@ -19,10 +19,10 @@ General Structure
 
 // LidarPacket is the raw decoded info of a lidar packet
 type LidarPacket struct {
-	TimeStamp  uint32       `json:"timestamp"`
-	ProductID  byte         `json:"productID"`
-	IsDualMode bool         `json:"isDualMode"`
-	blocks     []LidarBlock `json:"blocks"`
+	TimeStamp  uint32 `json:"timestamp"`
+	ProductID  byte   `json:"productID"`
+	IsDualMode bool   `json:"isDualMode"`
+	blocks     []LidarBlock
 }
 
 // LidarBlock contains the channels data

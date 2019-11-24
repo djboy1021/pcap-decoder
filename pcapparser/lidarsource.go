@@ -6,7 +6,7 @@ type LidarSource struct {
 	InitialAzimuth    uint16
 	nextPacketAzimuth uint16
 	CurrentPacket     LidarPacket
-	CurrenPoints      []LidarPoint
+	CurrentFrame      LidarFrame
 	Buffer            []LidarPoint
 }
 
@@ -32,7 +32,7 @@ func (ls *LidarSource) SetCurrentFrame() {
 				if isNewFrame {
 					ls.Buffer = append(ls.Buffer, point)
 				} else {
-					ls.CurrenPoints = append(ls.CurrenPoints, point)
+					ls.CurrentFrame.Points = append(ls.CurrentFrame.Points, point)
 				}
 			}
 		}
