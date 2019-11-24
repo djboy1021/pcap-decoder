@@ -12,7 +12,7 @@ type LidarSource struct {
 
 // SetCurrentFrame sets the point cloud of a LidarSource
 func (ls *LidarSource) SetCurrentFrame() {
-	prevAzimuth := float64(ls.InitialAzimuth)
+	prevAzimuth := ls.InitialAzimuth
 
 	for colIndex := uint8(0); colIndex < 12; colIndex++ {
 		currAzimuth := ls.CurrentPacket.Blocks[colIndex].Azimuth
@@ -22,6 +22,8 @@ func (ls *LidarSource) SetCurrentFrame() {
 		} else {
 			nextAzimuth = ls.nextPacketAzimuth
 		}
+
+		isNewFrame := isNewFrame(prevAzimuth, currAzimuth, nextAzimuth, ls)
 
 		for rowIndex := uint8(0); rowIndex < 32; rowIndex++ {
 			distance := ls.CurrentPacket.Blocks[colIndex].Channels[rowIndex].Distance
@@ -37,9 +39,7 @@ func (ls *LidarSource) SetCurrentFrame() {
 				azimuth:     currAzimuth,
 				nextAzimuth: nextAzimuth}
 
-			precisionAzimuth := point.Azimuth()
-
-			isNewFrame := isNewFrame(prevAzimuth, precisionAzimuth, currAzimuth, nextAzimuth, ls)
+			// precisionAzimuth := point.Azimuth()
 
 			if isNewFrame {
 				ls.Buffer = append(ls.Buffer, point)
@@ -47,18 +47,25 @@ func (ls *LidarSource) SetCurrentFrame() {
 				ls.CurrenPoints = append(ls.CurrenPoints, point)
 			}
 
-			prevAzimuth = precisionAzimuth
 		}
+
+		prevAzimuth = currAzimuth
 	}
 
 }
 
-func isNewFrame(previous float64, current float64, currAzimuth uint16, nextAzimuth uint16, ls *LidarSource) bool {
-	// offset := int(36000 - ls.InitialAzimuth)
+func isNewFrame(prevAzimuth uint16, currAzimuth uint16, nextAzimuth uint16, ls *LidarSource) bool {
+	offset := int(36000 - ls.InitialAzimuth)
 
-	isNewFrame := nextAzimuth < currAzimuth
+	// pPrevAzimuth := (int(prevAzimuth) + offset) % 36000
+	pCurrAzimuth := (int(currAzimuth) + offset) % 36000
+	pNextAzimuth := (int(nextAzimuth) + offset) % 36000
 
-	// isNewFrame := len(ls.Buffer) > 0 || pPrevious-pCurrent > 10000
+	isNewFrame := pNextAzimuth < pCurrAzimuth
+
+	// if isNewFrame {
+	// 	fmt.Println(pPrevAzimuth, pCurrAzimuth, pNextAzimuth)
+	// }
 
 	return isNewFrame
 }
