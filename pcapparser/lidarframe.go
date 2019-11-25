@@ -96,7 +96,7 @@ func (cp CartesianPoint) Translate(t Translation) CartesianPoint {
 		Z: cp.Z + float64(t.z)}
 }
 
-func getUnit(limits *[3][2]float64) float64 {
+func getUnit(limits *[3][2]float64, pixels uint16) float64 {
 	Xr := limits[0]
 	Yr := limits[1]
 
@@ -104,16 +104,16 @@ func getUnit(limits *[3][2]float64) float64 {
 	xDiff := Xr[1] - Xr[0]
 	yDiff := Yr[1] - Yr[0]
 	if xDiff > yDiff {
-		unit = xDiff / 512
+		unit = xDiff / float64(pixels)
 	} else {
-		unit = yDiff / 512
+		unit = yDiff / float64(pixels)
 	}
 
 	return unit
 }
 
 // GetMatrix returns an array of all XYZ points with granularity
-func (lf *LidarFrame) GetMatrix(limits *[3][2]float64, rotAngles RotationAngles, trans Translation) map[int]map[int]uint8 {
+func (lf *LidarFrame) GetMatrix(limits *[3][2]float64, pixels uint16, rotAngles RotationAngles, trans Translation) map[int]map[int]uint8 {
 	Xr := limits[0]
 	Yr := limits[1]
 	Zr := limits[2]
@@ -122,9 +122,9 @@ func (lf *LidarFrame) GetMatrix(limits *[3][2]float64, rotAngles RotationAngles,
 	xDiff := Xr[1] - Xr[0]
 	yDiff := Yr[1] - Yr[0]
 	if xDiff > yDiff {
-		unit = xDiff / 512
+		unit = xDiff / float64(pixels)
 	} else {
-		unit = yDiff / 512
+		unit = yDiff / float64(pixels)
 	}
 
 	// filename := fmt.Sprintf("./frame%d.png", lf.Index)

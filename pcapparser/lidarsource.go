@@ -2,7 +2,6 @@ package pcapparser
 
 import (
 	"fmt"
-	"math"
 )
 
 // LidarSource contains the iteration info of an IP address
@@ -65,53 +64,48 @@ func getNextAzimuth(colIndex uint8, ls *LidarSource) uint16 {
 
 // GetCurrentFramePosition locates the position of the current frame relative to the previous frame
 func (ls *LidarSource) GetCurrentFramePosition(xyzRange *[3][2]float64) {
-	pfM := ls.PreviousFrame.GetMatrix(xyzRange, RotationAngles{}, Translation{})
-	// cfM := ls.CurrentFrame.GetMatrix(xyzRange, RotationAngles{}, Translation{})
-	unit := getUnit(xyzRange)
-
-	offsets := []float64{-20 * unit, 0, 20 * unit}
-	matches := make(map[float64]uint16)
-
-	var cfM map[int]map[int]uint8
-	maxAccuracy := uint16(0)
-	var bestOffset float64
-
-	for i := 0; i < 8; i++ {
-		for _, offset := range offsets {
-			if matches[offset] == 0 {
-				cfM = ls.CurrentFrame.GetMatrix(xyzRange, RotationAngles{}, Translation{y: float32(offset)})
-				matches[offset] = getTotalMatch(pfM, cfM)
-				if maxAccuracy < matches[offset] {
-					maxAccuracy = matches[offset]
-					bestOffset = offset
-				}
-			}
-		}
-
-		if matches[offsets[0]] < matches[offsets[1]] {
-			offsets[2] = offsets[1]
-		} else {
-			offsets[0] = offsets[1]
-		}
-		offsets[1] = (offsets[0] + offsets[2]) / 2
-		// fmt.Println(matches)
+	var pixels uint16
+	var start, end float64
+	if ls.PreviousFrame.translation.y > 1 {
+		start = float64(ls.PreviousFrame.translation.y) * 0.75
+		end = float64(ls.PreviousFrame.translation.y) * 1.5
+		pixels = uint16(xyzRange[0][1]-xyzRange[0][0]) / 4
+	} else {
+		pixels = 512
+		unit := getUnit(xyzRange, pixels)
+		start = -10 * unit
+		end = 10 * unit
 	}
+	unit := getUnit(xyzRange, pixels)
+	pfM := ls.PreviousFrame.GetMatrix(xyzRange, pixels, RotationAngles{}, Translation{})
 
-	fmt.Println(maxAccuracy, bestOffset)
+	fmt.Println(pixels, unit, start, end)
+
+	maxAccuracy := uint(0)
+	for i := start; i <= end; i += unit {
+		offset := i
+		cfM := ls.CurrentFrame.GetMatrix(xyzRange, pixels, RotationAngles{}, Translation{y: float32(offset)})
+		match := getTotalMatch(pfM, cfM)
+
+		if maxAccuracy < match {
+			maxAccuracy = match
+			ls.CurrentFrame.translation.y = float32(offset)
+		}
+
+	}
+	fmt.Println("\nbest offset", ls.CurrentFrame.translation.y, maxAccuracy)
 }
 
-func getTotalMatch(previousFrame map[int]map[int]uint8, currentFrame map[int]map[int]uint8) uint16 {
-	sum := float64(0)
-	count := 0
+func getTotalMatch(previousFrame map[int]map[int]uint8, currentFrame map[int]map[int]uint8) uint {
+	count := uint(0)
 
 	for row := range currentFrame {
 		for col := range currentFrame[row] {
 			if previousFrame[row][col] != 0 {
 				count++
-				sum += math.Abs(float64(previousFrame[row][col])-float64(currentFrame[row][col])) / float64(previousFrame[row][col])
 			}
 		}
 	}
 
-	return uint16(10000 * sum / float64(count))
+	return count
 }
