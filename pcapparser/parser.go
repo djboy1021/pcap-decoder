@@ -55,7 +55,6 @@ func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, lidarSources
 		}
 
 		*lidarSources = append(*lidarSources, LidarSource{
-			FrameIndex:     0,
 			InitialAzimuth: initialAzimuth})
 		indexLookup[ipAddress] = uint8(len(*lidarSources))
 	}
@@ -71,27 +70,28 @@ func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, lidarSources
 		lidarSource.SetCurrentFrame()
 
 		if len(lidarSource.Buffer) > 0 {
-			// fmt.Println("New Frame", ipAddress, lidarSource.FrameIndex, len(lidarSource.CurrentFrame.Points), len(lidarSource.Buffer))
 
-			lidarSource.CurrentFrame.XYZ(
-				RotationAngles{},
-				Translation{x: 50, y: 20})
+			// lidarSource.CurrentFrame.XYZ(
+			// 	RotationAngles{},
+			// 	Translation{x: 50, y: 20})
 
 			// Variables for localization
-			unit := float64(20)
 			xyzRange := [3][2]float64{{-10000, 10000}, {-10000, 10000}, {-5000, 5000}}
 
-			lidarSource.LocalizeFrame(&xyzRange, unit)
+			if len(lidarSource.PreviousFrame.Points) > 0 {
+				lidarSource.GetCurrentFramePosition(&xyzRange)
+			}
 			// panic("temp")
 
+			lidarSource.PreviousFrame = lidarSource.CurrentFrame
 			lidarSource.CurrentFrame.Points = lidarSource.Buffer
 			lidarSource.Buffer = nil
 
-			lidarSource.FrameIndex++
+			lidarSource.CurrentFrame.Index++
 
-			if lidarSource.FrameIndex > 40 {
-				panic("Temp stop")
-			}
+			// if lidarSource.CurrentFrame.Index > 60 {
+			// 	panic("Temp stop")
+			// }
 		}
 
 		// fmt.Println(nextPacket.TimeStamp, lidarSource.CurrentPacket.TimeStamp)
