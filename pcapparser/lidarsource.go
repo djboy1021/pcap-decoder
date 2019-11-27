@@ -63,36 +63,41 @@ func getNextAzimuth(colIndex uint8, ls *LidarSource) uint16 {
 }
 
 // GetCurrentFramePosition locates the position of the current frame relative to the previous frame
-func (ls *LidarSource) GetCurrentFramePosition(xyzRange *[3][2]float64) {
+func (ls *LidarSource) GetCurrentFramePosition(limits *[3][2]float64) {
 	var pixels uint16
 	var start, end float64
-	if ls.PreviousFrame.translation.y > 1 {
-		start = float64(ls.PreviousFrame.translation.y) * 0.75
-		end = float64(ls.PreviousFrame.translation.y) * 1.5
-		pixels = uint16(xyzRange[0][1]-xyzRange[0][0]) / 4
-	} else {
-		pixels = 512
-		unit := getUnit(xyzRange, pixels)
-		start = -10 * unit
-		end = 10 * unit
-	}
-	unit := getUnit(xyzRange, pixels)
-	pfM := ls.PreviousFrame.GetMatrix(xyzRange, pixels, RotationAngles{}, Translation{})
 
-	fmt.Println(pixels, unit, start, end)
+	prevOffset := float64(ls.PreviousFrame.translation.y)
+	pixels = 2048
+	unit := getUnit(limits, pixels)
+	if ls.PreviousFrame.Index > 0 && prevOffset > 100 {
+		start = prevOffset * 0.8
+		end = prevOffset * 1.2
+	} else if ls.PreviousFrame.Index > 0 && prevOffset > 10 {
+		start = prevOffset - 5*unit
+		end = prevOffset + 5*unit
+	} else {
+		start = prevOffset - 10*unit
+		end = prevOffset + 10*unit
+	}
+
+	pfM := ls.PreviousFrame.GetMatrix(limits, pixels, RotationAngles{}, Translation{})
+	var cfM map[int]map[int]uint8
 
 	maxAccuracy := uint(0)
-	for i := start; i <= end; i += unit {
-		offset := i
-		cfM := ls.CurrentFrame.GetMatrix(xyzRange, pixels, RotationAngles{}, Translation{y: float32(offset)})
+	for offset := start; offset <= end; offset += unit {
+		cfM = ls.CurrentFrame.GetMatrix(limits, pixels, RotationAngles{}, Translation{y: float32(offset)})
 		match := getTotalMatch(pfM, cfM)
 
 		if maxAccuracy < match {
 			maxAccuracy = match
 			ls.CurrentFrame.translation.y = float32(offset)
 		}
-
 	}
+
+	fmt.Println(pixels, unit, start, prevOffset, end)
+	ls.PreviousFrame.visualizeFrame(limits, pixels)
+	// visualizeMap(pfM, limits, pixels, ls.PreviousFrame.Index)
 	fmt.Println("\nbest offset", ls.CurrentFrame.translation.y, maxAccuracy)
 }
 

@@ -2,7 +2,11 @@ package pcapparser
 
 import (
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"math"
+	"os"
 )
 
 // LidarFrame contains one revolution of the lidar
@@ -118,20 +122,10 @@ func (lf *LidarFrame) GetMatrix(limits *[3][2]float64, pixels uint16, rotAngles 
 	Yr := limits[1]
 	Zr := limits[2]
 
-	var unit float64
-	xDiff := Xr[1] - Xr[0]
-	yDiff := Yr[1] - Yr[0]
-	if xDiff > yDiff {
-		unit = xDiff / float64(pixels)
-	} else {
-		unit = yDiff / float64(pixels)
-	}
-
-	// filename := fmt.Sprintf("./frame%d.png", lf.Index)
-	// m := image.NewGray16(image.Rect(int(Xr[0]/unit), int(Yr[0]/unit), int(Xr[1]/unit), int(Yr[1]/unit)))
+	unit := getUnit(limits, pixels)
 
 	// allocate space for matrix
-	currPNGMatrix := make(map[int]map[int]uint8)
+	frameMap := make(map[int]map[int]uint8)
 
 	points := lf.XYZ(rotAngles, trans)
 
@@ -146,31 +140,41 @@ func (lf *LidarFrame) GetMatrix(limits *[3][2]float64, pixels uint16, rotAngles 
 
 			colorIntensity := uint16(0xFF * (cp.Z - Zr[0]) / (Zr[1] - Zr[0]))
 
-			if currPNGMatrix[xInd] != nil && currPNGMatrix[xInd][yInd] < uint8(colorIntensity) {
-				currPNGMatrix[xInd][yInd] = uint8(colorIntensity)
+			if frameMap[xInd] != nil && frameMap[xInd][yInd] < uint8(colorIntensity) {
+				frameMap[xInd][yInd] = uint8(colorIntensity)
 			} else {
-				currPNGMatrix[xInd] = map[int]uint8{}
-				currPNGMatrix[xInd][yInd] = uint8(colorIntensity)
+				frameMap[xInd] = map[int]uint8{}
+				frameMap[xInd][yInd] = uint8(colorIntensity)
 			}
 
-			// fmt.Println(xInd, yInd, currPNGMatrix[xInd][yInd])
-
-			// m.Set(int(cp.X/unit), int(cp.Y/unit), color.Gray16{uint16(colorIntensity)})
 		}
 	}
 
-	// f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// }
-	// defer f.Close()
-	// png.Encode(f, m)
-
-	return currPNGMatrix
-
+	return frameMap
 }
 
-func visualizeMap(frameMap map[int]map[int]uint8, index uint) {
-	// filename := fmt.Sprintf("./frame%d.png", index)
-	fmt.Println(frameMap)
+func (lf *LidarFrame) visualizeFrame(limits *[3][2]float64, pixels uint16) {
+	index := lf.Index
+
+	Xr := limits[0]
+	Yr := limits[1]
+	// Zr := limits[2]
+
+	unit := getUnit(limits, pixels)
+
+	filename := fmt.Sprintf("./frame%d.png", index)
+	m := image.NewGray16(image.Rect(int(Xr[0]/unit), int(Yr[0]/unit), int(Xr[1]/unit), int(Yr[1]/unit)))
+
+	frameMap := lf.GetMatrix(limits, pixels, RotationAngles{}, lf.translation)
+
+	for xInd := range frameMap {
+		for yInd := range frameMap[xInd] {
+			m.Set(xInd, yInd, color.RGBA{
+				255, 255, 0, 255})
+		}
+	}
+
+	f, _ := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)
+	defer f.Close()
+	png.Encode(f, m)
 }
