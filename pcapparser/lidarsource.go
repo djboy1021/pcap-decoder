@@ -2,6 +2,10 @@ package pcapparser
 
 import (
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
+	"os"
 )
 
 // LidarSource contains the iteration info of an IP address
@@ -62,43 +66,120 @@ func getNextAzimuth(colIndex uint8, ls *LidarSource) uint16 {
 	return nextAzimuth
 }
 
-// GetCurrentFramePosition locates the position of the current frame relative to the previous frame
-func (ls *LidarSource) GetCurrentFramePosition(limits *[3][2]float64) {
-	var pixels uint16
-	var start, end float64
+// LocalizeCurrentFrame locates the translation and rotation offset of the current frame relative to the previous frame
+func (ls *LidarSource) LocalizeCurrentFrame(limits *[3][2]float64) {
 
-	prevOffset := float64(ls.PreviousFrame.translation.y)
-	pixels = 2048
+	pixels := uint16(512)
+	index := ls.CurrentFrame.Index
+
+	Xr := limits[0]
+	Yr := limits[1]
 	unit := getUnit(limits, pixels)
-	if ls.PreviousFrame.Index > 0 && prevOffset > 100 {
-		start = prevOffset * 0.8
-		end = prevOffset * 1.2
-	} else if ls.PreviousFrame.Index > 0 && prevOffset > 10 {
-		start = prevOffset - 5*unit
-		end = prevOffset + 5*unit
-	} else {
-		start = prevOffset - 10*unit
-		end = prevOffset + 10*unit
+
+	cfm := ls.CurrentFrame.GetMatrix(limits, pixels, RotationAngles{}, Translation{})
+
+	trans := Translation{}
+
+	yOffset := ls.getBestFit(limits, pixels, "y", trans)
+	trans.y = yOffset
+	xOffset := ls.getBestFit(limits, pixels, "x", trans)
+
+	fmt.Println(xOffset, yOffset)
+
+	pfm := ls.PreviousFrame.GetMatrix(limits, pixels, RotationAngles{}, Translation{y: yOffset})
+	m := image.NewRGBA64(image.Rect(int(Xr[0]/unit), int(Yr[0]/unit), int(Xr[1]/unit), int(Yr[1]/unit)))
+	for xInd := range cfm {
+		for yInd := range cfm[xInd] {
+			m.Set(xInd, yInd, color.RGBA{
+				0,
+				255,
+				0,
+				255})
+		}
 	}
-
-	pfM := ls.PreviousFrame.GetMatrix(limits, pixels, RotationAngles{}, Translation{})
-	var cfM map[int]map[int]uint8
-
-	maxAccuracy := uint(0)
-	for offset := start; offset <= end; offset += unit {
-		cfM = ls.CurrentFrame.GetMatrix(limits, pixels, RotationAngles{}, Translation{y: float32(offset)})
-		match := getTotalMatch(pfM, cfM)
-
-		if maxAccuracy < match {
-			maxAccuracy = match
-			ls.CurrentFrame.translation.y = float32(offset)
+	for xInd := range pfm {
+		for yInd := range pfm[xInd] {
+			m.Set(xInd, yInd, color.RGBA{
+				255,
+				0,
+				0,
+				255})
 		}
 	}
 
-	fmt.Println(pixels, unit, start, prevOffset, end)
-	ls.PreviousFrame.visualizeFrame(limits, pixels)
-	// visualizeMap(pfM, limits, pixels, ls.PreviousFrame.Index)
-	fmt.Println("\nbest offset", ls.CurrentFrame.translation.y, maxAccuracy)
+	filename := fmt.Sprintf("./frame%d.png", index)
+	f, _ := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)
+	defer f.Close()
+	png.Encode(f, m)
+
+	// panic("Temp")
+}
+
+func (ls *LidarSource) getBestFit(limits *[3][2]float64, pixels uint16, dir string, defTrans Translation) float32 {
+	maxCount := uint(0)
+	bestFit := float32(0)
+
+	isForward := true
+	forwardCount := uint(0)
+	isBackward := true
+	backwardCount := uint(0)
+
+	var cfm map[int]map[int]uint8
+	pfm := ls.PreviousFrame.GetMatrix(limits, pixels, RotationAngles{}, Translation{})
+
+	for offset := float32(0); isForward || isBackward; offset++ {
+
+		if isForward {
+			switch dir {
+			case "x":
+				defTrans.x = offset
+			case "y":
+				defTrans.y = offset
+			case "z":
+				defTrans.z = offset
+			}
+			cfm = ls.CurrentFrame.GetMatrix(limits, pixels, RotationAngles{}, defTrans)
+
+			forwardCount = getTotalMatch(pfm, cfm)
+
+			if forwardCount > maxCount {
+				maxCount = forwardCount
+				bestFit = offset
+			}
+
+		}
+
+		if isBackward {
+			switch dir {
+			case "x":
+				defTrans.x = -offset
+			case "y":
+				defTrans.y = -offset
+			case "z":
+				defTrans.z = -offset
+			}
+			cfm = ls.CurrentFrame.GetMatrix(limits, pixels, RotationAngles{}, defTrans)
+
+			backwardCount = getTotalMatch(pfm, cfm)
+
+			if backwardCount > maxCount {
+				maxCount = backwardCount
+				bestFit = -offset
+			}
+		}
+
+		if maxCount > forwardCount<<1 || backwardCount > forwardCount<<1 {
+			isForward = false
+		}
+		if maxCount > backwardCount<<1 || forwardCount > backwardCount<<1 {
+			isBackward = false
+		}
+
+		// fmt.Println(offset, maxCount, "forward", isForward, forwardCount, "backward", isBackward, backwardCount)
+
+	}
+
+	return bestFit
 }
 
 func getTotalMatch(previousFrame map[int]map[int]uint8, currentFrame map[int]map[int]uint8) uint {
@@ -114,3 +195,5 @@ func getTotalMatch(previousFrame map[int]map[int]uint8, currentFrame map[int]map
 
 	return count
 }
+
+

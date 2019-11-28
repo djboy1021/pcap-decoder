@@ -163,14 +163,18 @@ func (lf *LidarFrame) visualizeFrame(limits *[3][2]float64, pixels uint16) {
 	unit := getUnit(limits, pixels)
 
 	filename := fmt.Sprintf("./frame%d.png", index)
-	m := image.NewGray16(image.Rect(int(Xr[0]/unit), int(Yr[0]/unit), int(Xr[1]/unit), int(Yr[1]/unit)))
+
+	m := image.NewRGBA64(image.Rect(int(Xr[0]/unit), int(Yr[0]/unit), int(Xr[1]/unit), int(Yr[1]/unit)))
 
 	frameMap := lf.GetMatrix(limits, pixels, RotationAngles{}, lf.translation)
 
 	for xInd := range frameMap {
 		for yInd := range frameMap[xInd] {
 			m.Set(xInd, yInd, color.RGBA{
-				255, 255, 0, 255})
+				0,
+				255,
+				0,
+				255})
 		}
 	}
 
