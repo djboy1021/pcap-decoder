@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"math"
 	"os"
 )
 
@@ -196,4 +197,47 @@ func getTotalMatch(previousFrame map[int]map[int]uint8, currentFrame map[int]map
 	return count
 }
 
+func (ls *LidarSource) elevationView() {
+	Hr := []float64{-2000, 10000}
+	// Ar := []int{0, 36000}
+	Dr := []int{0, 20000}
 
+	unit := float64(15)
+	width := 1024
+
+	m := image.NewRGBA64(image.Rect(0, int(Hr[0]/unit), width, int(Hr[1]/unit)))
+
+	for _, point := range ls.CurrentFrame.Points {
+		distance := point.Distance()
+		bearing := point.Bearing()
+		azimuth := int(math.Round(point.Azimuth()*100+float64(ls.InitialAzimuth))) % 36000
+		xInd := int(float32(width) * float32(azimuth) / 36000)
+
+		height := distance * math.Cos(rad(bearing))
+		depth := int(math.Round(distance * math.Sin(rad(bearing))))
+
+		if height < Hr[1] && height > Hr[0] && depth < Dr[1] {
+			c := uint32(float32(Dr[1]-depth) * 0xFFFFFF / float32(Dr[1]))
+			r := uint8((c & 0xFF0000) >> 16)
+			g := uint8((c & 0x00FF00) >> 8)
+			b := uint8(c & 0x0000FF)
+
+			// fmt.Println(r, b, g, azimuth, height/unit)
+
+			m.Set(xInd, int(height/unit), color.RGBA{
+				r,
+				g,
+				b,
+				255})
+		} else {
+			// fmt.Println(height)
+		}
+	}
+	filename := fmt.Sprintf("./elev%d.png", ls.CurrentFrame.Index)
+	fmt.Println(filename)
+
+	f, _ := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)
+	defer f.Close()
+	png.Encode(f, m)
+
+}

@@ -75,15 +75,16 @@ func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, lidarSources
 			// 	RotationAngles{},
 			// 	Translation{x: 50, y: 20})
 
-			// Variables for localization
-			limits := [3][2]float64{
-				{-10000, 10000},
-				{-10000, 10000},
-				{500, 5000}}
-
 			if len(lidarSource.PreviousFrame.Points) > 0 {
-				lidarSource.LocalizeCurrentFrame(&limits)
-				// lidarSource.CurrentFrame.visualizeFrame(&limits, 256)
+				lidarSource.elevationView()
+
+				// Variables for localization
+				limits := [3][2]float64{
+					{-20000, 20000},
+					{-20000, 20000},
+					{-10000, 10000}}
+				// lidarSource.LocalizeCurrentFrame(&limits)
+				lidarSource.CurrentFrame.visualizeFrame(&limits, 1024)
 			}
 
 			lidarSource.PreviousFrame = lidarSource.CurrentFrame
