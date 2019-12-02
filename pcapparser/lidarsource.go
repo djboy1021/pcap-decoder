@@ -198,23 +198,26 @@ func getTotalMatch(previousFrame map[int]map[int]uint8, currentFrame map[int]map
 }
 
 func (ls *LidarSource) elevationView() {
-	Hr := []float64{-2000, 10000}
+	Hr := []float64{-1500, 2500}
 	// Ar := []int{0, 36000}
 	Dr := []int{0, 20000}
 
-	unit := float64(15)
-	width := 1024
+	aspectRatio := 10
+	imgWidth := 2096
+	imgHeight := imgWidth / aspectRatio
 
-	m := image.NewRGBA64(image.Rect(0, int(Hr[0]/unit), width, int(Hr[1]/unit)))
+	unit := (Hr[1] - Hr[0]) / float64(imgHeight)
+
+	m := image.NewRGBA64(image.Rect(0, int(Hr[0]/unit), imgWidth, int(Hr[1]/unit)))
 
 	for _, point := range ls.CurrentFrame.Points {
 		distance := point.Distance()
 		bearing := point.Bearing()
-		azimuth := int(math.Round(point.Azimuth()*100+float64(ls.InitialAzimuth))) % 36000
-		xInd := int(float32(width) * float32(azimuth) / 36000)
+		azimuth := int(math.Round(point.Azimuth()*100)+18000) % 36000
+		xInd := int(float32(imgWidth) * float32(azimuth) / 36000)
 
-		height := distance * math.Cos(rad(bearing))
-		depth := int(math.Round(distance * math.Sin(rad(bearing))))
+		height := distance * math.Sin(rad(bearing))
+		depth := int(math.Round(distance * math.Cos(rad(bearing))))
 
 		if height < Hr[1] && height > Hr[0] && depth < Dr[1] {
 			c := uint32(float32(Dr[1]-depth) * 0xFFFFFF / float32(Dr[1]))
@@ -223,8 +226,9 @@ func (ls *LidarSource) elevationView() {
 			b := uint8(c & 0x0000FF)
 
 			// fmt.Println(r, b, g, azimuth, height/unit)
+			invHeight := Hr[1] + Hr[0] - height
 
-			m.Set(xInd, int(height/unit), color.RGBA{
+			m.Set(xInd, int(invHeight/unit), color.RGBA{
 				r,
 				g,
 				b,

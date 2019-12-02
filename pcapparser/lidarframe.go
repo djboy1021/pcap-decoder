@@ -146,7 +146,6 @@ func (lf *LidarFrame) GetMatrix(limits *[3][2]float64, pixels uint16, rotAngles 
 				frameMap[xInd] = map[int]uint8{}
 				frameMap[xInd][yInd] = uint8(colorIntensity)
 			}
-
 		}
 	}
 

@@ -76,13 +76,13 @@ func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, lidarSources
 			// 	Translation{x: 50, y: 20})
 
 			if len(lidarSource.PreviousFrame.Points) > 0 {
-				lidarSource.elevationView()
+				// lidarSource.elevationView()
 
 				// Variables for localization
 				limits := [3][2]float64{
 					{-20000, 20000},
 					{-20000, 20000},
-					{-10000, 10000}}
+					{-10000, 20000}}
 				// lidarSource.LocalizeCurrentFrame(&limits)
 				lidarSource.CurrentFrame.visualizeFrame(&limits, 1024)
 			}
