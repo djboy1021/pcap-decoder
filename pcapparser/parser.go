@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"image/png"
 	"os"
-	"pcap-decoder/calibration"
 	"pcap-decoder/cli"
 	"pcap-decoder/lib"
 
@@ -66,8 +65,6 @@ func decodeLidarPacket(p *gopacket.Packet, indexLookup map[string]uint8, lidarSo
 
 		*lidarSources = append(*lidarSources, LidarSource{
 			address:        ipAddress,
-			direction:      calibration.Lidars[ipAddress].Direction,
-			fov:            calibration.Lidars[ipAddress].FOV,
 			InitialAzimuth: initialAzimuth})
 		indexLookup[ipAddress] = uint8(len(*lidarSources))
 	}

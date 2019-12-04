@@ -7,13 +7,12 @@ import (
 	"image/png"
 	"math"
 	"os"
+	"pcap-decoder/calibration"
 )
 
 // LidarSource contains the iteration info of an IP address
 type LidarSource struct {
 	address           string
-	direction         int
-	fov               int
 	InitialAzimuth    uint16
 	nextPacketAzimuth uint16
 	CurrentPacket     LidarPacket
@@ -201,8 +200,10 @@ func getTotalMatch(previousFrame map[int]map[int]uint8, currentFrame map[int]map
 }
 
 func (ls *LidarSource) elevationView() {
+	camera := calibration.Cameras["front"]
+
 	Hr := []float64{-1500, 2500}
-	Ar := []int{ls.direction - ls.fov, ls.direction + ls.fov}
+	Ar := []int{camera.Direction - camera.FOV/2, camera.Direction + camera.FOV/2}
 	Dr := []int{0, 20000}
 
 	arLen := Ar[1] - Ar[0]
@@ -210,9 +211,8 @@ func (ls *LidarSource) elevationView() {
 		arLen = 36000 + arLen
 	}
 
-	// aspectRatio := 10
-	imgWidth := 4096 / 4
-	imgHeight := 2176 / 4
+	imgWidth := 4096 / 8
+	imgHeight := 2176 / 8
 
 	unitH := (Hr[1] - Hr[0]) / float64(imgHeight)
 
