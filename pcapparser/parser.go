@@ -1,8 +1,16 @@
 package pcapparser
 
 import (
+	"fmt"
+	"image/png"
+	"os"
+	"pcap-decoder/calibration"
 	"pcap-decoder/cli"
 	"pcap-decoder/lib"
+
+	"github.com/32bitkid/mpeg/pes"
+	"github.com/32bitkid/mpeg/ts"
+	"github.com/32bitkid/mpeg/video"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
@@ -23,9 +31,11 @@ PACKETS:
 
 		switch len(nextPacketData) {
 		case 1248:
-			decodePacket(&packet, indexLookup, &lidarSources, &nextPacketData)
+			decodeLidarPacket(&packet, indexLookup, &lidarSources, &nextPacketData)
 		case 554:
 			// fmt.Println("GPRMC packet")
+		case 1358:
+			// decodeCameraPacket(&packet)
 		default:
 			continue PACKETS
 		}
@@ -41,7 +51,7 @@ func getPackets() (chan gopacket.Packet, error) {
 	return gopacket.NewPacketSource(handle, handle.LinkType()).Packets(), err
 }
 
-func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, lidarSources *[]LidarSource, nextPacketData *[]byte) {
+func decodeLidarPacket(p *gopacket.Packet, indexLookup map[string]uint8, lidarSources *[]LidarSource, nextPacketData *[]byte) {
 	ipAddress := lib.GetIPv4((*p).String())
 
 	// Parse packet in advance
@@ -55,6 +65,9 @@ func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, lidarSources
 		}
 
 		*lidarSources = append(*lidarSources, LidarSource{
+			address:        ipAddress,
+			direction:      calibration.Lidars[ipAddress].Direction,
+			fov:            calibration.Lidars[ipAddress].FOV,
 			InitialAzimuth: initialAzimuth})
 		indexLookup[ipAddress] = uint8(len(*lidarSources))
 	}
@@ -76,15 +89,19 @@ func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, lidarSources
 			// 	Translation{x: 50, y: 20})
 
 			if len(lidarSource.PreviousFrame.Points) > 0 {
-				// lidarSource.elevationView()
+				lidarSource.elevationView()
 
 				// Variables for localization
-				limits := [3][2]float64{
-					{-20000, 20000},
-					{-20000, 20000},
-					{-10000, 20000}}
-				// lidarSource.LocalizeCurrentFrame(&limits)
-				lidarSource.CurrentFrame.visualizeFrame(&limits, 1024)
+				// limits := [3][2]float64{
+				// 	{-20000, 20000},
+				// 	{-20000, 20000},
+				// 	{-10000, 20000}}
+				// // lidarSource.LocalizeCurrentFrame(&limits)
+				// lidarSource.CurrentFrame.visualizeFrame(&limits, 1024)
+
+				if cli.UserInput.IsSaveAsJSON {
+					lidarSource.PreviousFrame.ToJSON()
+				}
 			}
 
 			lidarSource.PreviousFrame = lidarSource.CurrentFrame
@@ -103,4 +120,35 @@ func decodePacket(p *gopacket.Packet, indexLookup map[string]uint8, lidarSources
 
 	// Update current packet
 	lidarSource.CurrentPacket = nextPacket
+}
+
+func decodeCameraPacket(p *gopacket.Packet) {
+	tsReader, err := os.Open("C:/Users/brendon.dulam/Desktop/video3.ts")
+	check(err)
+
+	// Decode PID 0x21 from the TS stream
+	pesReader := ts.NewPayloadUnitReader(tsReader, ts.IsPID(0x100))
+
+	// Decode the PES stream
+	esReader := pes.NewPayloadReader(pesReader)
+
+	// Decode the ES into a stream of frames
+	v := video.NewVideoSequence(esReader)
+
+	// Align to next sequence start/entry point
+	v.AlignTo(video.SequenceHeaderStartCode)
+
+	// get the next frame
+	frame, _ := v.Next()
+	for frame == nil {
+		fmt.Println(frame)
+		if frame != nil {
+			file, _ := os.Create("output.png")
+			png.Encode(file, frame)
+		}
+
+		frame, _ = v.Next()
+	}
+
+	panic("Exit")
 }

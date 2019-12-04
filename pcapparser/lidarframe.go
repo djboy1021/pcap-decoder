@@ -1,12 +1,16 @@
 package pcapparser
 
 import (
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
 	"image/png"
 	"math"
 	"os"
+	"path/filepath"
+	"pcap-decoder/cli"
+	"sync"
 )
 
 // LidarFrame contains one revolution of the lidar
@@ -33,9 +37,10 @@ type Translation struct {
 
 // CartesianPoint contains X, Y, Z
 type CartesianPoint struct {
-	X float64 `json:"x"`
-	Y float64 `json:"y"`
-	Z float64 `json:"z"`
+	X         float64 `json:"x"`
+	Y         float64 `json:"y"`
+	Z         float64 `json:"z"`
+	Intensity uint8   `json:"i"`
 }
 
 // XYZ returns the cartesian coordinates of all points
@@ -180,4 +185,47 @@ func (lf *LidarFrame) visualizeFrame(limits *[3][2]float64, pixels uint16) {
 	f, _ := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)
 	defer f.Close()
 	png.Encode(f, m)
+}
+
+// ToJSON saves the lidar points in json format
+func (lf *LidarFrame) ToJSON() {
+	pointsLen := len(lf.Points)
+	points := make([]CartesianPoint, pointsLen)
+
+	// Waitgroup for storing points
+	var wg sync.WaitGroup
+	wg.Add(pointsLen)
+
+	// Convert points to Cartesian points
+	for index, p := range lf.Points {
+		go appendToPoints(&points, index, &p, &wg)
+	}
+	wg.Wait()
+
+	// Save to JSON
+	outputFileName := fmt.Sprintf("frame%d.json", lf.Index)
+	outputFileName = filepath.Join(cli.UserInput.OutputPath, outputFileName)
+
+	os.Remove(outputFileName)
+	f, err := os.OpenFile(outputFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	defer f.Close()
+	check(err)
+
+	allPoints, _ := json.Marshal(points)
+
+	_, err = f.WriteString(string(allPoints))
+	check(err)
+
+	// fmt.Println("saved", outputFileName)
+}
+
+func appendToPoints(points *[]CartesianPoint, index int, point *LidarPoint, wg *sync.WaitGroup) {
+	xyzi := (*point).GetXYZ()
+
+	(*points)[index] = CartesianPoint{
+		X:         math.Round(xyzi.X*100) / 100,
+		Y:         math.Round(xyzi.Y*100) / 100,
+		Z:         math.Round(xyzi.Z*100) / 100,
+		Intensity: xyzi.Intensity}
+	wg.Done()
 }

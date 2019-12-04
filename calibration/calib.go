@@ -18,11 +18,16 @@ type RotationPRY struct {
 type LidarCalib struct {
 	Rotation    RotationPRY
 	Translation PointXYZ
+	Direction   int
+	FOV         int
 }
 
 // Lidars contain the lidar calibration
 var Lidars = map[string]LidarCalib{
-	"192.168.1.201": LidarCalib{Rotation: RotationPRY{0.0, 0.0, 0.0},
+	"192.168.1.201": LidarCalib{
+		Direction:   0,
+		FOV:         4500,
+		Rotation:    RotationPRY{0.0, 0.0, 0.0},
 		Translation: PointXYZ{0.0, 0.0, 0.0}},
 
 	"192.168.1.202": LidarCalib{Rotation: RotationPRY{-0.110758, 35.8838, 0.963915},

@@ -11,6 +11,9 @@ import (
 
 // LidarSource contains the iteration info of an IP address
 type LidarSource struct {
+	address           string
+	direction         int
+	fov               int
 	InitialAzimuth    uint16
 	nextPacketAzimuth uint16
 	CurrentPacket     LidarPacket
@@ -199,22 +202,34 @@ func getTotalMatch(previousFrame map[int]map[int]uint8, currentFrame map[int]map
 
 func (ls *LidarSource) elevationView() {
 	Hr := []float64{-1500, 2500}
-	// Ar := []int{0, 36000}
+	Ar := []int{ls.direction - ls.fov, ls.direction + ls.fov}
 	Dr := []int{0, 20000}
 
-	aspectRatio := 10
-	imgWidth := 2096
-	imgHeight := imgWidth / aspectRatio
+	arLen := Ar[1] - Ar[0]
+	if arLen < 0 {
+		arLen = 36000 + arLen
+	}
 
-	unit := (Hr[1] - Hr[0]) / float64(imgHeight)
+	// aspectRatio := 10
+	imgWidth := 4096 / 4
+	imgHeight := 2176 / 4
 
-	m := image.NewRGBA64(image.Rect(0, int(Hr[0]/unit), imgWidth, int(Hr[1]/unit)))
+	unitH := (Hr[1] - Hr[0]) / float64(imgHeight)
+
+	m := image.NewRGBA64(image.Rect(0, int(Hr[0]/unitH), imgWidth, int(Hr[1]/unitH)))
 
 	for _, point := range ls.CurrentFrame.Points {
 		distance := point.Distance()
 		bearing := point.Bearing()
-		azimuth := int(math.Round(point.Azimuth()*100)+18000) % 36000
-		xInd := int(float32(imgWidth) * float32(azimuth) / 36000)
+
+		// Check if azimuth is within range
+		azimuth100 := point.Azimuth() * 100
+		if int(azimuth100) < Ar[0] && int(azimuth100) > Ar[1] {
+			continue
+		}
+
+		azimuth := (int(math.Round(azimuth100)) + 36000 - Ar[0]) % 36000
+		xInd := int(float32(imgWidth) * float32(azimuth) / float32(arLen))
 
 		height := distance * math.Sin(rad(bearing))
 		depth := int(math.Round(distance * math.Cos(rad(bearing))))
@@ -225,19 +240,17 @@ func (ls *LidarSource) elevationView() {
 			g := uint8((c & 0x00FF00) >> 8)
 			b := uint8(c & 0x0000FF)
 
-			// fmt.Println(r, b, g, azimuth, height/unit)
 			invHeight := Hr[1] + Hr[0] - height
 
-			m.Set(xInd, int(invHeight/unit), color.RGBA{
-				r,
-				g,
-				b,
-				255})
+			m.Set(
+				xInd,
+				int(invHeight/unitH),
+				color.RGBA{r, g, b, 255})
 		} else {
 			// fmt.Println(height)
 		}
 	}
-	filename := fmt.Sprintf("./elev%d.png", ls.CurrentFrame.Index)
+	filename := fmt.Sprintf("./%s-elev%d.png", ls.address, ls.CurrentFrame.Index)
 	fmt.Println(filename)
 
 	f, _ := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)

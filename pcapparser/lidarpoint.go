@@ -29,9 +29,10 @@ func (p LidarPoint) GetXYZ() CartesianPoint {
 	distance := float64(p.Distance())
 
 	return CartesianPoint{
-		X: distance * cosEl * sinAzimuth,
-		Y: distance * cosEl * cosAzimuth,
-		Z: distance * sinEl}
+		X:         distance * cosEl * sinAzimuth,
+		Y:         distance * cosEl * cosAzimuth,
+		Z:         distance * sinEl,
+		Intensity: uint8(p.Intensity)}
 }
 
 // Distance returns the distance in mm
