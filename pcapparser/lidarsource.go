@@ -31,20 +31,22 @@ func (ls *LidarSource) SetCurrentFrame() {
 
 		for rowIndex := uint8(0); rowIndex < 32; rowIndex++ {
 			distance := ls.CurrentPacket.blocks[colIndex].Channels[rowIndex].Distance
-			if distance > 0 {
-				point := LidarPoint{
-					rowIndex:    rowIndex,
-					productID:   ls.CurrentPacket.ProductID,
-					Intensity:   ls.CurrentPacket.blocks[colIndex].Channels[rowIndex].Reflectivity,
-					distance:    distance,
-					azimuth:     currAzimuth,
-					nextAzimuth: nextAzimuth}
+			if distance == 0 {
+				continue
+			}
 
-				if isNewFrame {
-					ls.Buffer = append(ls.Buffer, point)
-				} else {
-					ls.CurrentFrame.Points = append(ls.CurrentFrame.Points, point)
-				}
+			point := LidarPoint{
+				rowIndex:    rowIndex,
+				productID:   ls.CurrentPacket.ProductID,
+				Intensity:   ls.CurrentPacket.blocks[colIndex].Channels[rowIndex].Reflectivity,
+				distance:    distance,
+				azimuth:     currAzimuth,
+				nextAzimuth: nextAzimuth}
+
+			if isNewFrame {
+				ls.Buffer = append(ls.Buffer, point)
+			} else {
+				ls.CurrentFrame.Points = append(ls.CurrentFrame.Points, point)
 			}
 		}
 	}
@@ -199,20 +201,17 @@ func getTotalMatch(previousFrame map[int]map[int]uint8, currentFrame map[int]map
 	return count
 }
 
-func (ls *LidarSource) elevationView(cameraName string) {
+func (ls *LidarSource) elevationView(cameraName string, imgWidth int, imgHeight int) {
 	camera := calibration.Cameras[cameraName]
 
 	Hr := []float64{-1500, 2500}
-	Ar := []int{camera.Direction - camera.FOV/2, camera.Direction + camera.FOV/2}
-	Dr := []int{0, 20000}
+	Ar := camera.AzimuthRange()
+	Dr := []int{0, 100000}
 
 	arLen := Ar[1] - Ar[0]
 	if arLen < 0 {
 		arLen = 36000 + arLen
 	}
-
-	imgWidth := 4096 / 8
-	imgHeight := 2176 / 8
 
 	unitH := (Hr[1] - Hr[0]) / float64(imgHeight)
 

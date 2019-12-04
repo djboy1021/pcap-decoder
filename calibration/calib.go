@@ -48,6 +48,25 @@ var Cameras = map[string]Camera{
 		Direction: 0,
 		FOV:       8500}}
 
+// AzimuthRange returns the fov angle range of the camera
+func (c Camera) AzimuthRange() []int {
+	fov2 := c.FOV / 2
+
+	min := normalizeAngle(c.Direction - fov2)
+	max := normalizeAngle(c.Direction + fov2)
+
+	return []int{
+		min,
+		max}
+}
+
+func normalizeAngle(angle int) int {
+	if angle < 0 {
+		angle += 36000
+	}
+	return angle
+}
+
 // lidars:
 // - condition: "src 192.168.1.201"
 // 	calib: "VLP_32C.xml"

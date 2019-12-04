@@ -86,7 +86,10 @@ func decodeLidarPacket(p *gopacket.Packet, indexLookup map[string]uint8, lidarSo
 			// 	Translation{x: 50, y: 20})
 
 			if len(lidarSource.PreviousFrame.Points) > 0 {
-				lidarSource.elevationView("front")
+				imgWidth := 4096 / 4
+				imgHeight := 2176 / 4
+
+				lidarSource.elevationView("front", imgWidth, imgHeight)
 
 				// Variables for localization
 				// limits := [3][2]float64{
@@ -107,12 +110,8 @@ func decodeLidarPacket(p *gopacket.Packet, indexLookup map[string]uint8, lidarSo
 
 			lidarSource.CurrentFrame.Index++
 
-			// if lidarSource.CurrentFrame.Index > 60 {
-			// 	panic("Temp stop")
-			// }
 		}
 
-		// fmt.Println(nextPacket.TimeStamp, lidarSource.CurrentPacket.TimeStamp)
 	}
 
 	// Update current packet
