@@ -199,8 +199,8 @@ func getTotalMatch(previousFrame map[int]map[int]uint8, currentFrame map[int]map
 	return count
 }
 
-func (ls *LidarSource) elevationView() {
-	camera := calibration.Cameras["front"]
+func (ls *LidarSource) elevationView(cameraName string) {
+	camera := calibration.Cameras[cameraName]
 
 	Hr := []float64{-1500, 2500}
 	Ar := []int{camera.Direction - camera.FOV/2, camera.Direction + camera.FOV/2}

@@ -2,16 +2,16 @@ package calibration
 
 // PointXYZ contains the X, Y, Z values of a point
 type PointXYZ struct {
-	X float64
-	Y float64
-	Z float64
+	X float32
+	Y float32
+	Z float32
 }
 
 // RotationPRY contains the pitch, roll, and yaw values of a rotation
 type RotationPRY struct {
-	Pitch float64
-	Roll  float64
-	Yaw   float64
+	Pitch float32
+	Roll  float32
+	Yaw   float32
 }
 
 // LidarCalib contains the rotation and translation of a lidar
@@ -35,11 +35,11 @@ var Lidars = map[string]LidarCalib{
 
 	"192.168.1.202": LidarCalib{
 		Rotation:    RotationPRY{-0.110758, 35.8838, 0.963915},
-		Translation: PointXYZ{0.698224, -0.409333, 0.0245121}},
+		Translation: PointXYZ{698.224, -409.333, 24.5121}},
 
 	"192.168.1.203": LidarCalib{
 		Rotation:    RotationPRY{0.452015, -35.5394, 0.0694017},
-		Translation: PointXYZ{-0.405472, -0.363273, -0.0448637}}}
+		Translation: PointXYZ{-405.472, -363.273, -44.8637}}}
 
 // Cameras contain the Camera calibration
 var Cameras = map[string]Camera{
