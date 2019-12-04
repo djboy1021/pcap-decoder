@@ -8,25 +8,65 @@ import (
 
 // LidarPoint contains the point information in spherical system.
 type LidarPoint struct {
-	rowIndex    uint8
-	productID   byte
 	distance    uint16
 	azimuth     uint16
 	nextAzimuth uint16
+	rowIndex    uint8
+	productID   byte
 	Intensity   byte
+}
+
+// CartesianPoint contains X, Y, Z
+type CartesianPoint struct {
+	X         float64 `json:"x"`
+	Y         float64 `json:"y"`
+	Z         float64 `json:"z"`
+	Intensity uint8   `json:"i"`
+}
+
+// SphericalPoint contains radius, azimuth angle, and elevation angle
+type SphericalPoint struct {
+	Radius  float64 `json:"r"`
+	Azimuth float64 `json:"azimuth"`
+	Bearing float64 `json:"bearing"`
+}
+
+// ToSpherical transforms the cartesian point into spherical coordinate, angles are in degrees
+func (cp CartesianPoint) ToSpherical() SphericalPoint {
+	radius := math.Sqrt(cp.X*cp.X + cp.Y*cp.Y + cp.Z*cp.Z)
+	return SphericalPoint{
+		Radius:  radius,
+		Azimuth: normalizeAngle(degrees(math.Atan(cp.X / cp.Y))),
+		Bearing: normalizeAngle(degrees(math.Asin(cp.Z / radius)))}
+}
+
+// Rotate returns the rotated cartesian point
+func (cp CartesianPoint) Rotate(A *[3][3]float64) CartesianPoint {
+	return CartesianPoint{
+		X: A[0][0]*cp.X + A[0][1]*cp.Y + A[0][2]*cp.Z,
+		Y: A[1][0]*cp.X + A[1][1]*cp.Y + A[1][2]*cp.Z,
+		Z: A[2][0]*cp.X + A[2][1]*cp.Y + A[2][2]*cp.Z}
+}
+
+// Translate returns the translated CartesianPoint position
+func (cp CartesianPoint) Translate(t Translation) CartesianPoint {
+	return CartesianPoint{
+		X: cp.X + float64(t.x),
+		Y: cp.Y + float64(t.y),
+		Z: cp.Z + float64(t.z)}
 }
 
 // GetXYZ returns the XYZ Coordinates
 func (p LidarPoint) GetXYZ() CartesianPoint {
-	azimuth := rad(p.Azimuth())
-	elevAngle := rad(p.Bearing())
+	azimuth := radians(p.Azimuth())
+	elevAngle := radians(p.Bearing())
 
 	cosEl := math.Cos(elevAngle)
 	sinEl := math.Sin(elevAngle)
 	sinAzimuth := math.Sin(azimuth)
 	cosAzimuth := math.Cos(azimuth)
 
-	distance := float64(p.Distance())
+	distance := p.Distance()
 
 	return CartesianPoint{
 		X:         distance * cosEl * sinAzimuth,

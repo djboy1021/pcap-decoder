@@ -45,6 +45,24 @@ func getRawElevationAngle(productID byte, rowIndex uint8) int16 {
 	return elevAngle
 }
 
-func rad(degrees float64) float64 {
-	return degrees * math.Pi / 180
+const piOver180 = math.Pi / 180
+
+func radians(degrees float64) float64 {
+	return degrees * piOver180
+}
+
+func degrees(radians float64) float64 {
+	deg := radians / piOver180
+	if deg < 0 {
+		deg += 360
+	}
+
+	return deg
+}
+
+func normalizeAngle(angle float64) float64 {
+	if angle < 0 {
+		angle += 360
+	}
+	return angle
 }

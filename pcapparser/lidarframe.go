@@ -35,16 +35,8 @@ type Translation struct {
 	z float32
 }
 
-// CartesianPoint contains X, Y, Z
-type CartesianPoint struct {
-	X         float64 `json:"x"`
-	Y         float64 `json:"y"`
-	Z         float64 `json:"z"`
-	Intensity uint8   `json:"i"`
-}
-
-// XYZ returns the cartesian coordinates of all points
-func (lf *LidarFrame) XYZ(r RotationAngles, t Translation) []CartesianPoint {
+// CartesianPoints returns the cartesian coordinates of all points
+func (lf *LidarFrame) CartesianPoints(r RotationAngles, t Translation) []CartesianPoint {
 	A := getRotationMultipliers(&r)
 
 	points := make([]CartesianPoint, len(lf.Points))
@@ -56,10 +48,27 @@ func (lf *LidarFrame) XYZ(r RotationAngles, t Translation) []CartesianPoint {
 	return points
 }
 
+// SphericalPoints returns the spherical coordinates of all points
+func (lf *LidarFrame) SphericalPoints(r RotationAngles, t Translation) []SphericalPoint {
+	A := getRotationMultipliers(&r)
+
+	points := make([]SphericalPoint, len(lf.Points))
+
+	for i := range lf.Points {
+		if lf.Points[i].distance == 0 {
+			fmt.Println(lf.Points[i])
+		}
+		cp := lf.Points[i].GetXYZ().Rotate(&A).Translate(t)
+		points[i] = cp.ToSpherical()
+	}
+
+	return points
+}
+
 func getRotationMultipliers(r *RotationAngles) [3][3]float64 {
-	yaw := rad(float64(r.yaw) / 100)
-	pitch := rad(float64(r.pitch) / 100)
-	roll := rad(float64(r.roll) / 100)
+	pitch := radians(float64(r.pitch) / 100)
+	roll := radians(float64(r.roll) / 100)
+	yaw := radians(float64(r.yaw) / 100)
 
 	cosa := math.Cos(yaw)
 	sina := math.Sin(yaw)
@@ -89,38 +98,6 @@ func getRotationMultipliers(r *RotationAngles) [3][3]float64 {
 
 }
 
-// Rotate returns the rotated cartesian point
-func (cp CartesianPoint) Rotate(A *[3][3]float64) CartesianPoint {
-	return CartesianPoint{
-		X: A[0][0]*cp.X + A[0][1]*cp.Y + A[0][2]*cp.Z,
-		Y: A[1][0]*cp.X + A[1][1]*cp.Y + A[1][2]*cp.Z,
-		Z: A[2][0]*cp.X + A[2][1]*cp.Y + A[2][2]*cp.Z}
-}
-
-// Translate returns the translated CartesianPoint position
-func (cp CartesianPoint) Translate(t Translation) CartesianPoint {
-	return CartesianPoint{
-		X: cp.X + float64(t.x),
-		Y: cp.Y + float64(t.y),
-		Z: cp.Z + float64(t.z)}
-}
-
-func getUnit(limits *[3][2]float64, pixels uint16) float64 {
-	Xr := limits[0]
-	Yr := limits[1]
-
-	var unit float64
-	xDiff := Xr[1] - Xr[0]
-	yDiff := Yr[1] - Yr[0]
-	if xDiff > yDiff {
-		unit = xDiff / float64(pixels)
-	} else {
-		unit = yDiff / float64(pixels)
-	}
-
-	return unit
-}
-
 // GetMatrix returns an array of all XYZ points with granularity
 func (lf *LidarFrame) GetMatrix(limits *[3][2]float64, pixels uint16, rotAngles RotationAngles, trans Translation) map[int]map[int]uint8 {
 	Xr := limits[0]
@@ -132,7 +109,7 @@ func (lf *LidarFrame) GetMatrix(limits *[3][2]float64, pixels uint16, rotAngles 
 	// allocate space for matrix
 	frameMap := make(map[int]map[int]uint8)
 
-	points := lf.XYZ(rotAngles, trans)
+	points := lf.CartesianPoints(rotAngles, trans)
 
 	for _, cp := range points {
 		isWithinX := cp.X >= Xr[0] && cp.X < Xr[1]
@@ -228,4 +205,20 @@ func appendToPoints(points *[]CartesianPoint, index int, point *LidarPoint, wg *
 		Z:         math.Round(xyzi.Z*100) / 100,
 		Intensity: xyzi.Intensity}
 	wg.Done()
+}
+
+func getUnit(limits *[3][2]float64, pixels uint16) float64 {
+	Xr := limits[0]
+	Yr := limits[1]
+
+	var unit float64
+	xDiff := Xr[1] - Xr[0]
+	yDiff := Yr[1] - Yr[0]
+	if xDiff > yDiff {
+		unit = xDiff / float64(pixels)
+	} else {
+		unit = yDiff / float64(pixels)
+	}
+
+	return unit
 }

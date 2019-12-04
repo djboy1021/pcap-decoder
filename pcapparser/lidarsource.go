@@ -19,6 +19,7 @@ type LidarSource struct {
 	CurrentFrame      LidarFrame
 	PreviousFrame     LidarFrame
 	Buffer            []LidarPoint
+	Calibration       calibration.LidarCalib
 }
 
 // SetCurrentFrame sets the point cloud of a LidarSource
@@ -204,9 +205,9 @@ func getTotalMatch(previousFrame map[int]map[int]uint8, currentFrame map[int]map
 func (ls *LidarSource) elevationView(cameraName string, imgWidth int, imgHeight int) {
 	camera := calibration.Cameras[cameraName]
 
-	Hr := []float64{-1500, 2500}
 	Ar := camera.AzimuthRange()
-	Dr := []int{0, 100000}
+	Hr := []float64{-1500, 2500}
+	Dr := []int{0, 40000}
 
 	arLen := Ar[1] - Ar[0]
 	if arLen < 0 {
@@ -217,12 +218,36 @@ func (ls *LidarSource) elevationView(cameraName string, imgWidth int, imgHeight 
 
 	m := image.NewRGBA64(image.Rect(0, int(Hr[0]/unitH), imgWidth, int(Hr[1]/unitH)))
 
+	// rotation := RotationAngles{
+	// 	pitch: ls.Calibration.Rotation.Pitch,
+	// 	roll:  ls.Calibration.Rotation.Roll,
+	// 	yaw:   ls.Calibration.Rotation.Yaw}
+	rotation := RotationAngles{}
+
+	A := getRotationMultipliers(&rotation)
+
+	// p := CartesianPoint{X: 1, Y: 1, Z: 1}
+	// fmt.Println(p, p.Rotate(&A), A)
+	// translation := Translation{x: 0, y: 0, z: 0}
+
+	var distance, bearing, azimuth100 float64
+
 	for _, point := range ls.CurrentFrame.Points {
-		distance := point.Distance()
-		bearing := point.Bearing()
+		if rotation.pitch == 0 && rotation.roll == 0 && rotation.yaw == 0 {
+			distance = point.Distance()
+			bearing = point.Bearing()
+			azimuth100 = point.Azimuth() * 100
+		} else {
+			sp := point.GetXYZ().Rotate(&A).ToSpherical()
+
+			distance = sp.Radius
+			bearing = sp.Bearing
+			azimuth100 = sp.Azimuth * 100
+		}
+
+		// fmt.Println(distance, azimuth100, bearing, point.GetXYZ().Rotate(&A).ToSpherical())
 
 		// Check if azimuth is within range
-		azimuth100 := point.Azimuth() * 100
 		if int(azimuth100) < Ar[0] && int(azimuth100) > Ar[1] {
 			continue
 		}
@@ -230,8 +255,8 @@ func (ls *LidarSource) elevationView(cameraName string, imgWidth int, imgHeight 
 		azimuth := (int(math.Round(azimuth100)) + 36000 - Ar[0]) % 36000
 		xInd := int(float32(imgWidth) * float32(azimuth) / float32(arLen))
 
-		height := distance * math.Sin(rad(bearing))
-		depth := int(math.Round(distance * math.Cos(rad(bearing))))
+		height := distance * math.Sin(radians(bearing))
+		depth := int(math.Round(distance * math.Cos(radians(bearing))))
 
 		if height < Hr[1] && height > Hr[0] && depth < Dr[1] {
 			c := uint32(float32(Dr[1]-depth) * 0xFFFFFF / float32(Dr[1]))
@@ -245,15 +270,14 @@ func (ls *LidarSource) elevationView(cameraName string, imgWidth int, imgHeight 
 				xInd,
 				int(invHeight/unitH),
 				color.RGBA{r, g, b, 255})
-		} else {
-			// fmt.Println(height)
+
 		}
 	}
+
 	filename := fmt.Sprintf("./%s-elev%d.png", ls.address, ls.CurrentFrame.Index)
 	fmt.Println(filename)
 
 	f, _ := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)
 	defer f.Close()
 	png.Encode(f, m)
-
 }

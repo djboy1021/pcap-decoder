@@ -88,7 +88,7 @@ func getPrecisionAzimuth(currAzimuth uint16, nextAzimuth uint16, rowIndex uint8,
 	return precisionAzimuth
 }
 
-func rad(degrees float64) float64 {
+func radians(degrees float64) float64 {
 	return degrees * math.Pi / 180
 }
 
@@ -114,10 +114,10 @@ func getXYZCoordinates(distance *uint32, azimuth uint16, productID byte, rowInde
 
 	elevAngle := getElevationAngle(productID, rowIndex)
 
-	cosEl := math.Cos(rad((elevAngle)))
-	sinEl := math.Sin(rad((elevAngle)))
-	sinAzimuth := math.Sin(rad((azimuthOffset) + float64(azimuth)/100))
-	cosAzimuth := math.Cos(rad((azimuthOffset) + float64(azimuth)/100))
+	cosEl := math.Cos(radians((elevAngle)))
+	sinEl := math.Sin(radians((elevAngle)))
+	sinAzimuth := math.Sin(radians((azimuthOffset) + float64(azimuth)/100))
+	cosAzimuth := math.Cos(radians((azimuthOffset) + float64(azimuth)/100))
 
 	X := math.Round(float64(*distance) * cosEl * sinAzimuth)
 	Y := math.Round(float64(*distance) * cosEl * cosAzimuth)
