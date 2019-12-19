@@ -1,4 +1,4 @@
-package pcapparser
+package pcapdecoder
 
 import (
 	"fmt"
@@ -18,10 +18,10 @@ type LidarPoint struct {
 
 // CartesianPoint contains X, Y, Z
 type CartesianPoint struct {
-	X         float64 `json:"x"`
-	Y         float64 `json:"y"`
-	Z         float64 `json:"z"`
-	Intensity uint8   `json:"i"`
+	X         float64 `json:"x" bson:"x"`
+	Y         float64 `json:"y" bson:"y"`
+	Z         float64 `json:"z" bson:"z"`
+	Intensity uint8   `json:"i" bson:"i"`
 }
 
 // SphericalPoint contains radius, azimuth angle, and elevation angle

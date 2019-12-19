@@ -1,4 +1,4 @@
-package pcapparser
+package pcapdecoder
 
 import (
 	"encoding/json"
@@ -165,7 +165,7 @@ func (lf *LidarFrame) visualizeFrame(limits *[3][2]float64, pixels uint16) {
 }
 
 // ToJSON saves the lidar points in json format
-func (lf *LidarFrame) ToJSON() {
+func (lf *LidarFrame) ToJSON(isSave bool) []byte {
 	pointsLen := len(lf.Points)
 	points := make([]CartesianPoint, pointsLen)
 
@@ -179,21 +179,23 @@ func (lf *LidarFrame) ToJSON() {
 	}
 	wg.Wait()
 
-	// Save to JSON
-	outputFileName := fmt.Sprintf("frame%d.json", lf.Index)
-	outputFileName = filepath.Join(cli.UserInput.OutputPath, outputFileName)
-
-	os.Remove(outputFileName)
-	f, err := os.OpenFile(outputFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	defer f.Close()
-	check(err)
-
 	allPoints, _ := json.Marshal(points)
 
-	_, err = f.WriteString(string(allPoints))
-	check(err)
+	if isSave {
+		// Save to JSON
+		outputFileName := fmt.Sprintf("frame%d.json", lf.Index)
+		outputFileName = filepath.Join(cli.UserInput.OutputPath, outputFileName)
 
-	// fmt.Println("saved", outputFileName)
+		os.Remove(outputFileName)
+		f, err := os.OpenFile(outputFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		defer f.Close()
+		check(err)
+
+		_, err = f.WriteString(string(allPoints))
+		check(err)
+	}
+
+	return allPoints
 }
 
 func appendToPoints(points *[]CartesianPoint, index int, point *LidarPoint, wg *sync.WaitGroup) {

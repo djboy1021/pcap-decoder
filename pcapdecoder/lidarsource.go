@@ -1,4 +1,4 @@
-package pcapparser
+package pcapdecoder
 
 import (
 	"fmt"
@@ -12,9 +12,9 @@ import (
 
 // LidarSource contains the iteration info of an IP address
 type LidarSource struct {
-	address           string
+	Address           string
 	InitialAzimuth    uint16
-	nextPacketAzimuth uint16
+	NextPacketAzimuth uint16
 	CurrentPacket     LidarPacket
 	CurrentFrame      LidarFrame
 	PreviousFrame     LidarFrame
@@ -23,15 +23,28 @@ type LidarSource struct {
 }
 
 // SetCurrentFrame sets the point cloud of a LidarSource
-func (ls *LidarSource) SetCurrentFrame() {
+func (ls *LidarSource) SetCurrentFrame(frameIndex uint) {
+
 	for colIndex := uint8(0); colIndex < 12; colIndex++ {
-		currAzimuth := ls.CurrentPacket.blocks[colIndex].Azimuth
+		currAzimuth := ls.CurrentPacket.Blocks[colIndex].Azimuth
 		nextAzimuth := getNextAzimuth(colIndex, ls)
 
 		isNewFrame := isNewFrame(currAzimuth, nextAzimuth, ls)
+		if isNewFrame {
+			ls.CurrentFrame.Index++
+		}
+
+		//if ls.CurrentFrame.Index != frameIndex {
+		//	continue
+		//}
+
+		//curAzimuthPoints := make([]float64, 0)
+		//weights := make([]float64, 0)
 
 		for rowIndex := uint8(0); rowIndex < 32; rowIndex++ {
-			distance := ls.CurrentPacket.blocks[colIndex].Channels[rowIndex].Distance
+			distance := ls.CurrentPacket.Blocks[colIndex].Channels[rowIndex].Distance
+			//weights = append(weights, 1)
+			//curAzimuthPoints = append(curAzimuthPoints, float64(distance)*2)
 			if distance == 0 {
 				continue
 			}
@@ -39,7 +52,7 @@ func (ls *LidarSource) SetCurrentFrame() {
 			point := LidarPoint{
 				rowIndex:    rowIndex,
 				productID:   ls.CurrentPacket.ProductID,
-				Intensity:   ls.CurrentPacket.blocks[colIndex].Channels[rowIndex].Reflectivity,
+				Intensity:   ls.CurrentPacket.Blocks[colIndex].Channels[rowIndex].Reflectivity,
 				distance:    distance,
 				azimuth:     currAzimuth,
 				nextAzimuth: nextAzimuth}
@@ -49,7 +62,11 @@ func (ls *LidarSource) SetCurrentFrame() {
 			} else {
 				ls.CurrentFrame.Points = append(ls.CurrentFrame.Points, point)
 			}
+			//fmt.Println(ls.CurrentFrame.Index, len(ls.Buffer), len(ls.CurrentFrame.Points))
 		}
+
+		//mean, stdDev := stat.MeanStdDev(curAzimuthPoints, weights)
+		//fmt.Println(mean, stdDev, curAzimuthPoints)
 	}
 }
 
@@ -65,9 +82,9 @@ func isNewFrame(currAzimuth uint16, nextAzimuth uint16, ls *LidarSource) bool {
 func getNextAzimuth(colIndex uint8, ls *LidarSource) uint16 {
 	var nextAzimuth uint16
 	if colIndex < 10 {
-		nextAzimuth = ls.CurrentPacket.blocks[colIndex+1].Azimuth
+		nextAzimuth = ls.CurrentPacket.Blocks[colIndex+1].Azimuth
 	} else {
-		nextAzimuth = ls.nextPacketAzimuth
+		nextAzimuth = ls.NextPacketAzimuth
 	}
 	return nextAzimuth
 }
@@ -203,11 +220,14 @@ func getTotalMatch(previousFrame map[int]map[int]uint8, currentFrame map[int]map
 }
 
 func (ls *LidarSource) elevationView(cameraName string, imgWidth int, imgHeight int) {
+
+	//fmt.Println(ls.CurrentFrame.Index)
+
 	camera := calibration.Cameras[cameraName]
 
 	Ar := camera.AzimuthRange()
 	Hr := []float64{-1500, 2500}
-	Dr := []int{0, 40000}
+	Dr := []int{0, 10000}
 
 	arLen := Ar[1] - Ar[0]
 	if arLen < 0 {
@@ -219,9 +239,9 @@ func (ls *LidarSource) elevationView(cameraName string, imgWidth int, imgHeight 
 	m := image.NewRGBA64(image.Rect(0, int(Hr[0]/unitH), imgWidth, int(Hr[1]/unitH)))
 
 	// rotation := RotationAngles{
-	// 	pitch: ls.Calibration.Rotation.Pitch,
-	// 	roll:  ls.Calibration.Rotation.Roll,
-	// 	yaw:   ls.Calibration.Rotation.Yaw}
+	// 	pitch: ls.Calibration.Rotation.Yaw,
+	// 	roll:  ls.Calibration.Rotation.Pitch,
+	// 	yaw:   ls.Calibration.Rotation.Roll}
 	rotation := RotationAngles{}
 
 	A := getRotationMultipliers(&rotation)
@@ -274,7 +294,7 @@ func (ls *LidarSource) elevationView(cameraName string, imgWidth int, imgHeight 
 		}
 	}
 
-	filename := fmt.Sprintf("./%s-elev%d.png", ls.address, ls.CurrentFrame.Index)
+	filename := fmt.Sprintf("./%s-elev%d.png", ls.Address, ls.CurrentFrame.Index)
 	fmt.Println(filename)
 
 	f, _ := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0600)

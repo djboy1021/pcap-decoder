@@ -1,4 +1,4 @@
-package pcapparser
+package pcapdecoder
 
 import (
 	"fmt"
@@ -22,7 +22,7 @@ type LidarPacket struct {
 	TimeStamp  uint32 `json:"timestamp"`
 	ProductID  byte   `json:"productID"`
 	IsDualMode bool   `json:"isDualMode"`
-	blocks     []LidarBlock
+	Blocks     []LidarBlock
 }
 
 // LidarBlock contains the channels data
@@ -50,7 +50,7 @@ func NewLidarPacket(data *[]byte) (LidarPacket, error) {
 			IsDualMode: isDualMode(data),
 			ProductID:  getProductID(data),
 			TimeStamp:  getTime(data),
-			blocks:     blocks}
+			Blocks:     blocks}
 	} else {
 		err = fmt.Errorf("not a lidar packet")
 	}
